@@ -1,11 +1,11 @@
-/** SJTC Dashboard v3.0.1 — modular source */
+/** SJTC Dashboard v3.0.2 — modular source */
 /***********************
- * SJTC Production Department Dashboard v3.0.1
+ * SJTC Production Department Dashboard v3.0.2
  * Frontend for GitHub Pages
  * Set PRODUCTION_API_URL to your Cloudflare Worker URL after deployment.
  ***********************/
 const PRODUCTION_API_URL = "https://production.sjtc-kobempeynado.workers.dev/";
-const APP_VERSION = "3.0.1";
+const APP_VERSION = "3.0.2";
 // Logistics is now native to this Production Dashboard database.
 const ADMIN_PIN_KEY = "sjtc_production_access_pin";
 const DEMO_PIN = "123456";
@@ -81,13 +81,13 @@ const demo = (() => {
   const today = new Date();
   const d = n => { const x = new Date(today); x.setDate(x.getDate()+n); return ymd(x); };
   const personnel = [
-    { PersonnelID:"PER-0001", PersonnelName:"Juan D.", Role:"Team Lead", Department:"Production", ContactNumber:"", CanDrive:"N", CanInstall:"Y", Active:"Y" },
-    { PersonnelID:"PER-0002", PersonnelName:"Mark", Role:"Carpenter", Department:"Production", ContactNumber:"", CanDrive:"N", CanInstall:"Y", Active:"Y" },
-    { PersonnelID:"PER-0003", PersonnelName:"Allan", Role:"Helper", Department:"Production", ContactNumber:"", CanDrive:"N", CanInstall:"Y", Active:"Y" },
-    { PersonnelID:"PER-0004", PersonnelName:"Rico", Role:"Painter", Department:"Production", ContactNumber:"", CanDrive:"N", CanInstall:"N", Active:"Y" },
-    { PersonnelID:"PER-0005", PersonnelName:"Mang Tony", Role:"Driver", Department:"Logistics", ContactNumber:"0917 555 1111", CanDrive:"Y", CanInstall:"N", Active:"Y" },
-    { PersonnelID:"PER-0006", PersonnelName:"CK Empeynado", Role:"Admin / Production Manager", Department:"Admin", ContactNumber:"", CanDrive:"Y", CanInstall:"N", Active:"Y" },
-    { PersonnelID:"PER-0007", PersonnelName:"Design Staff", Role:"Designer", Department:"Design", ContactNumber:"", CanDrive:"N", CanInstall:"N", Active:"Y" }
+    { PersonnelID:"PER-0001", PersonnelName:"Juan D.", Role:"Team Lead", Department:"Production", PrimaryTeamID:"TEAM-0001", ContactNumber:"", CanDrive:"N", CanInstall:"Y", Active:"Y" },
+    { PersonnelID:"PER-0002", PersonnelName:"Mark", Role:"Carpenter", Department:"Production", PrimaryTeamID:"TEAM-0001", ContactNumber:"", CanDrive:"N", CanInstall:"Y", Active:"Y" },
+    { PersonnelID:"PER-0003", PersonnelName:"Allan", Role:"Helper", Department:"Production", PrimaryTeamID:"TEAM-0001", ContactNumber:"", CanDrive:"N", CanInstall:"Y", Active:"Y" },
+    { PersonnelID:"PER-0004", PersonnelName:"Rico", Role:"Painter", Department:"Production", PrimaryTeamID:"TEAM-0002", ContactNumber:"", CanDrive:"N", CanInstall:"N", Active:"Y" },
+    { PersonnelID:"PER-0005", PersonnelName:"Mang Tony", Role:"Driver", Department:"Logistics", PrimaryTeamID:"", ContactNumber:"0917 555 1111", CanDrive:"Y", CanInstall:"N", Active:"Y" },
+    { PersonnelID:"PER-0006", PersonnelName:"CK Empeynado", Role:"Admin / Production Manager", Department:"Admin", PrimaryTeamID:"", ContactNumber:"", CanDrive:"Y", CanInstall:"N", Active:"Y" },
+    { PersonnelID:"PER-0007", PersonnelName:"Design Staff", Role:"Designer", Department:"Design", PrimaryTeamID:"", ContactNumber:"", CanDrive:"N", CanInstall:"N", Active:"Y" }
   ];
   return {
     settings: { ADMIN_PIN: DEMO_PIN, OFFICER_PIN: DEMO_OFFICER_PIN, APP_NAME: "SJTC Production Department Dashboard", VERSION: APP_VERSION, PROCESS_COLUMNS: DEFAULT_PROCESS_COLUMNS.join("|") },
