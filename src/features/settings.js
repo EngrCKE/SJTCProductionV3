@@ -1,4 +1,4 @@
-/** SJTC Dashboard v3.0.1 — simplified master data */
+/** SJTC Dashboard v3.0.2 — master data and team rosters */
 function yesNo(v){return String(v||'N').toUpperCase()==='Y'?'Y':'N';}
 function personName(p){return p?(p.PersonnelName||p.FullName||p.Name||p.DriverName||''):'';}
 function personRole(p){return p?(p.Role||'Personnel'):'Personnel';}
@@ -12,98 +12,54 @@ function departmentGroupedRows(list,rowBuilder,emptyText='No records yet.'){cons
 function settingValue(key,fallback=''){return state.settings&&Object.prototype.hasOwnProperty.call(state.settings,key)?state.settings[key]:fallback;}
 function collapsible(title,body,opts={}){return `<details class="settingsBlock settingsTileBlock"${opts.open?' open':''}><summary><span>${escapeHtml(title)}</span>${opts.count!==undefined?`<span class="badge">${escapeHtml(opts.count)}</span>`:''}</summary><div class="settingsBody">${body}</div></details>`;}
 function settingsList(rows,emptyText='No records yet.'){return `<div class="settingsList">${rows.length?rows.join(''):`<div class="hint">${escapeHtml(emptyText)}</div>`}</div>`;}
-function settingsRow({title,role='—',dept='—',action='',recordId=''}){return `<button type="button" class="settingsListRow" data-settings-action="${escapeAttr(action)}" data-record-id="${escapeAttr(recordId)}"><span class="setName">${escapeHtml(title||'Unnamed')}</span><span class="setRole">${escapeHtml(role||'—')}</span><span class="setDept">${escapeHtml(dept||'—')}</span></button>`;}
-function bindSettingsRecordButtons(){
-  document.querySelectorAll('[data-settings-action]').forEach(btn=>{
-    btn.onclick=()=>{
-      const action=String(btn.dataset.settingsAction||'');
-      const recordId=String(btn.dataset.recordId||'').trim();
-      if(action==='personnel') return editPersonnel(recordId);
-      if(action==='team') return editTeam(recordId);
-      if(action==='vehicle') return editVehicle(recordId);
-      if(action==='announcement') return editAnnouncement(recordId);
-    };
-  });
-}
+function settingsRow({title,role='—',dept='—',action='',recordIndex='',recordId=''}){return `<button type="button" class="settingsListRow" data-settings-action="${escapeAttr(action)}" data-record-index="${escapeAttr(recordIndex)}" data-record-id="${escapeAttr(recordId)}"><span class="setName">${escapeHtml(title||'Unnamed')}</span><span class="setRole">${escapeHtml(role||'—')}</span><span class="setDept">${escapeHtml(dept||'—')}</span></button>`;}
+function bindSettingsRecordButtons(){document.querySelectorAll('[data-settings-action]').forEach(btn=>{btn.onclick=()=>{const action=String(btn.dataset.settingsAction||''),index=Number(btn.dataset.recordIndex),id=String(btn.dataset.recordId||'').trim();if(action==='personnel')return editPersonnelByIndex(index);if(action==='team')return editTeam(id);if(action==='vehicle')return editVehicle(id);if(action==='announcement')return editAnnouncement(id);};});}
+function primaryTeamName(p){return p&&p.PrimaryTeamID?teamName(p.PrimaryTeamID):'No primary team';}
+function personnelForTeam(teamId){return state.personnel.filter(p=>String(p.Active||'Y').toUpperCase()!=='N'&&String(p.PrimaryTeamID||'')===String(teamId||''));}
 
 function openSettingsForm(title,fields,values,onSave){
   const disabled=!state.admin?' disabled':'';
   $('projectModalTitle').textContent=title;$('projectModalBadge').textContent=state.admin?'Admin edit':'View only';
-  $('projectModalBody').innerHTML=`<div class="settingsForm compactSettingsForm">${fields.map(f=>{
-    const val=values[f.key]??f.default??'',help=f.help?`<div class="hint">${escapeHtml(f.help)}</div>`:'';
-    if(f.type==='textarea')return `<div><label>${escapeHtml(f.label)}</label><textarea id="sf_${escapeAttr(f.key)}"${disabled}>${escapeHtml(val)}</textarea>${help}</div>`;
-    if(f.type==='select')return `<div><label>${escapeHtml(f.label)}</label><select id="sf_${escapeAttr(f.key)}"${disabled}>${(f.options||[]).map(o=>`<option value="${escapeAttr(o.value??o)}" ${String(val)===String(o.value??o)?'selected':''}>${escapeHtml(o.label??o)}</option>`).join('')}</select>${help}</div>`;
-    return `<div><label>${escapeHtml(f.label)}</label><input id="sf_${escapeAttr(f.key)}" value="${escapeAttr(val)}" placeholder="${escapeAttr(f.placeholder||'')}"${disabled}/>${help}</div>`;
-  }).join('')}</div>`;
-  $('projectModalFooter').innerHTML=`<button data-close="projectModal">Close</button>${state.admin?`<button class="ok" id="btnSettingsFormSave">Save</button>`:''}`;
-  openModal('projectModal');
+  $('projectModalBody').innerHTML=`<div class="settingsForm compactSettingsForm">${fields.map(f=>{const val=values[f.key]??f.default??'',help=f.help?`<div class="hint">${escapeHtml(f.help)}</div>`:'';if(f.type==='textarea')return `<div><label>${escapeHtml(f.label)}</label><textarea id="sf_${escapeAttr(f.key)}"${disabled}>${escapeHtml(val)}</textarea>${help}</div>`;if(f.type==='select')return `<div><label>${escapeHtml(f.label)}</label><select id="sf_${escapeAttr(f.key)}"${disabled}>${(f.options||[]).map(o=>`<option value="${escapeAttr(o.value??o)}" ${String(val)===String(o.value??o)?'selected':''}>${escapeHtml(o.label??o)}</option>`).join('')}</select>${help}</div>`;return `<div><label>${escapeHtml(f.label)}</label><input id="sf_${escapeAttr(f.key)}" value="${escapeAttr(val)}" placeholder="${escapeAttr(f.placeholder||'')}"${disabled}/>${help}</div>`;}).join('')}</div>`;
+  $('projectModalFooter').innerHTML=`<button data-close="projectModal">Close</button>${state.admin?`<button class="ok" id="btnSettingsFormSave">Save</button>`:''}`;openModal('projectModal');
   if($('btnSettingsFormSave'))$('btnSettingsFormSave').onclick=e=>runAction(e,'Saving...',async()=>{const data={};fields.forEach(f=>{const el=$('sf_'+f.key);data[f.key]=el?el.value.trim():'';});await onSave(data);closeModal('projectModal');await load({silent:true});});
 }
-function editSetting(key,label,help){
-  const isPin=['ADMIN_PIN','OFFICER_PIN'].includes(key);
-  openSettingsForm(`Edit ${label||key}`,[{key:'Value',label:isPin?'New PIN':(label||key),type:key==='PROCESS_COLUMNS'?'textarea':'input',help:isPin?'The current PIN is never displayed. Enter the replacement value.':help}],{Value:isPin?'':settingValue(key)},async data=>api('upsertSetting',{pin:accessPin(),key,value:data.Value}));
-}
-function editPersonnel(id=''){
-  const personnelId=String(id||'').trim();
-  const found=personnelId?state.personnel.find(x=>String(x.PersonnelID||'').trim()===personnelId):null;
-  if(personnelId&&!found){ alert('Personnel record could not be found. Refresh the dashboard and try again.'); return; }
-  const p=found?Object.assign({},found):{};
-  openSettingsForm(personnelId?'Edit Personnel':'Add Personnel',[
-    {key:'PersonnelName',label:'Name'},{key:'Role',label:'Role'},{key:'Department',label:'Department'},{key:'ContactNumber',label:'Contact Number'},
-    {key:'CanDrive',label:'Can Drive',type:'select',options:['N','Y']},{key:'CanInstall',label:'Can Install / Field Work',type:'select',options:['N','Y']},{key:'Active',label:'Active',type:'select',options:['Y','N']}
-  ],Object.assign({Active:'Y',CanDrive:'N',CanInstall:'N'},p),async data=>{
-    const personnel=Object.assign({},p,data);
-    if(personnelId) personnel.PersonnelID=personnelId;
-    return api('upsertPersonnel',{pin:accessPin(),personnel});
-  });
+function editSetting(key,label,help){const isPin=['ADMIN_PIN','OFFICER_PIN'].includes(key);openSettingsForm(`Edit ${label||key}`,[{key:'Value',label:isPin?'New PIN':(label||key),type:key==='PROCESS_COLUMNS'?'textarea':'input',help:isPin?'The current PIN is never displayed. Enter the replacement value.':help}],{Value:isPin?'':settingValue(key)},async data=>api('upsertSetting',{pin:accessPin(),key,value:data.Value}));}
+function editPersonnelByIndex(index){const p=state.personnel[index];if(!p){alert('Personnel record could not be loaded. Refresh the dashboard and try again.');return;}return editPersonnelRecord(p);}
+function editPersonnel(id=''){if(!id)return editPersonnelRecord({});const p=state.personnel.find(x=>String(x.PersonnelID||'')===String(id))||null;if(!p){alert('Personnel record could not be found. Refresh the dashboard and try again.');return;}return editPersonnelRecord(p);}
+function editPersonnelRecord(source){
+  const p=Object.assign({},source||{}),isEdit=!!p.PersonnelID;
+  const teamOptions=[{value:'',label:'No primary team'}].concat(state.teams.filter(t=>t.Active!=='N').map(t=>({value:t.TeamID,label:t.TeamName})));
+  openSettingsForm(isEdit?'Edit Personnel':'Add Personnel',[
+    {key:'PersonnelName',label:'Name'},{key:'Role',label:'Role'},{key:'Department',label:'Department'},
+    {key:'PrimaryTeamID',label:'Primary Team',type:'select',options:teamOptions,help:'This defines the person’s regular team roster. The person may still be assigned to an item under another team.'},
+    {key:'ContactNumber',label:'Contact Number'},{key:'CanDrive',label:'Can Drive',type:'select',options:['N','Y']},{key:'CanInstall',label:'Can Install / Field Work',type:'select',options:['N','Y']},{key:'Active',label:'Active',type:'select',options:['Y','N']}
+  ],Object.assign({Active:'Y',CanDrive:'N',CanInstall:'N',PrimaryTeamID:''},p),async data=>{const personnel=Object.assign({},p,data);if(isEdit)personnel.PersonnelID=p.PersonnelID;return api('upsertPersonnel',{pin:accessPin(),personnel});});
 }
 function editTeam(id=''){
-  const teamId=String(id||'').trim();
-  const t=teamId?(state.teams.find(x=>String(x.TeamID||'').trim()===teamId)||{}):{};
-  if(teamId&&!t.TeamID){ alert('Team record could not be found. Refresh the dashboard and try again.'); return; }
-  const options=[{value:'',label:'None'}].concat(activePersonnelSorted().map(p=>({value:personName(p),label:personnelLabel(p)})));
-  openSettingsForm(t.TeamID?'Team Details':'Add Team',[
-    {key:'TeamName',label:'Team Name'},{key:'TeamLead',label:'Default Team Lead',type:'select',options,help:'This is the team’s usual lead. It does not force every SO or item to use that person.'},{key:'Active',label:'Active',type:'select',options:['Y','N']}
-  ],Object.assign({Active:'Y'},t),async data=>{const team=Object.assign({},t,data);if(teamId)team.TeamID=teamId;return api('upsertTeam',{pin:accessPin(),team});});
+  const teamId=String(id||'').trim(),existing=teamId?(state.teams.find(x=>String(x.TeamID||'')===teamId)||null):null;if(teamId&&!existing){alert('Team record could not be found. Refresh and try again.');return;}
+  const t=Object.assign({},existing||{}),leadOptions=[{value:'',label:'None'}].concat(activePersonnelSorted().map(p=>({value:personName(p),label:personnelLabel(p)}))),selected=new Set(personnelForTeam(teamId).map(p=>String(p.PersonnelID)));
+  $('projectModalTitle').textContent=teamId?'Edit Team':'Add Team';$('projectModalBadge').textContent=state.admin?'Admin edit':'View only';
+  const disabled=!state.admin?' disabled':'';
+  $('projectModalBody').innerHTML=`<div class="settingsForm compactSettingsForm"><div><label>Team Name</label><input id="sf_TeamName" value="${escapeAttr(t.TeamName||'')}"${disabled}></div><div><label>Default Team Lead</label><select id="sf_TeamLead"${disabled}>${leadOptions.map(o=>`<option value="${escapeAttr(o.value)}" ${String(t.TeamLead||'')===String(o.value)?'selected':''}>${escapeHtml(o.label)}</option>`).join('')}</select><div class="hint">The usual lead only; items may be assigned to another team or person.</div></div><div><label>Active</label><select id="sf_Active"${disabled}><option value="Y" ${(t.Active||'Y')==='Y'?'selected':''}>Y</option><option value="N" ${t.Active==='N'?'selected':''}>N</option></select></div></div><div class="memberPickerBlock"><div class="memberPickerHead"><div><b>Team Members</b><div class="hint">A person has one primary team, but may still work on items assigned to other teams.</div></div></div><div class="memberPickerList">${activePersonnelSorted().map(p=>`<label class="memberPickRow"><input type="checkbox" data-team-member-id="${escapeAttr(p.PersonnelID)}" ${selected.has(String(p.PersonnelID))?'checked':''}${disabled}><span class="memberPickName">${escapeHtml(personName(p))}</span><span class="memberPickRole">${escapeHtml(personRole(p))}</span><span class="memberPickDept">${escapeHtml(personDept(p))}</span></label>`).join('')||'<div class="hint">Add personnel first.</div>'}</div></div>`;
+  $('projectModalFooter').innerHTML=`<button data-close="projectModal">Close</button>${state.admin?'<button class="ok" id="btnSettingsFormSave">Save Team</button>':''}`;openModal('projectModal');
+  if($('btnSettingsFormSave'))$('btnSettingsFormSave').onclick=e=>runAction(e,'Saving team...',async()=>{const team={...t,TeamName:$('sf_TeamName').value.trim(),TeamLead:$('sf_TeamLead').value.trim(),Active:$('sf_Active').value};if(teamId)team.TeamID=teamId;const saved=await api('upsertTeam',{pin:accessPin(),team});const savedTeamId=saved.team&&saved.team.TeamID?saved.team.TeamID:teamId;const personnelIds=[...document.querySelectorAll('[data-team-member-id]:checked')].map(x=>x.dataset.teamMemberId);await api('saveTeamMembers',{pin:accessPin(),teamId:savedTeamId,personnelIds});closeModal('projectModal');await load({silent:true});});
 }
-function editVehicle(id=''){
-  const vehicleId=String(id||'').trim();
-  const v=vehicleId?(state.vehicles.find(x=>String(x.VehicleID||'').trim()===vehicleId)||{}):{};
-  if(vehicleId&&!v.VehicleID){ alert('Vehicle record could not be found. Refresh the dashboard and try again.'); return; }
-  openSettingsForm(v.VehicleID?'Vehicle Details':'Add Vehicle',[
-    {key:'VehicleCode',label:'Vehicle Code'},{key:'VehicleLabel',label:'Vehicle Label'},{key:'PlateNo',label:'Plate Number'},{key:'PlateEnding',label:'Plate Ending'},{key:'Active',label:'Active',type:'select',options:['Y','N']}
-  ],Object.assign({Active:'Y'},v),async data=>{const vehicle=Object.assign({},v,data);if(vehicleId)vehicle.VehicleID=vehicleId;return api('upsertVehicle',{pin:accessPin(),vehicle});});
-}
-function editAnnouncement(id=''){
-  const announcementId=String(id||'').trim();
-  const a=announcementId?(state.announcements.find(x=>String(x.AnnouncementID||'').trim()===announcementId)||{}):{};
-  if(announcementId&&!a.AnnouncementID){ alert('Announcement record could not be found. Refresh the dashboard and try again.'); return; }
-  openSettingsForm(a.AnnouncementID?'Announcement Details':'Add Announcement',[
-    {key:'Title',label:'Title'},{key:'Message',label:'Message',type:'textarea'},{key:'PostedBy',label:'Posted By'},{key:'ExpiryDate',label:'Expiry Date'},{key:'Active',label:'Active',type:'select',options:['Y','N']}
-  ],Object.assign({Active:'Y'},a),async data=>{const announcement=Object.assign({},a,data);if(announcementId)announcement.AnnouncementID=announcementId;return api('upsertAnnouncement',{pin:accessPin(),announcement});});
-}
-
+function editVehicle(id=''){const vehicleId=String(id||'').trim(),v=vehicleId?(state.vehicles.find(x=>String(x.VehicleID||'')===vehicleId)||null):{};if(vehicleId&&!v){alert('Vehicle record could not be found. Refresh and try again.');return;}openSettingsForm(vehicleId?'Edit Vehicle':'Add Vehicle',[{key:'VehicleCode',label:'Vehicle Code'},{key:'VehicleLabel',label:'Vehicle Label'},{key:'PlateNo',label:'Plate Number'},{key:'PlateEnding',label:'Plate Ending'},{key:'Active',label:'Active',type:'select',options:['Y','N']}],Object.assign({Active:'Y'},v||{}),async data=>{const vehicle=Object.assign({},v||{},data);if(vehicleId)vehicle.VehicleID=vehicleId;return api('upsertVehicle',{pin:accessPin(),vehicle});});}
+function editAnnouncement(id=''){const announcementId=String(id||'').trim(),a=announcementId?(state.announcements.find(x=>String(x.AnnouncementID||'')===announcementId)||null):{};if(announcementId&&!a){alert('Announcement record could not be found. Refresh and try again.');return;}openSettingsForm(announcementId?'Edit Announcement':'Add Announcement',[{key:'Title',label:'Title'},{key:'Message',label:'Message',type:'textarea'},{key:'PostedBy',label:'Posted By'},{key:'ExpiryDate',label:'Expiry Date'},{key:'Active',label:'Active',type:'select',options:['Y','N']}],Object.assign({Active:'Y'},a||{}),async data=>{const announcement=Object.assign({},a||{},data);if(announcementId)announcement.AnnouncementID=announcementId;return api('upsertAnnouncement',{pin:accessPin(),announcement});});}
 function renderSettings(){
-  const personnelBody=`${state.admin?`<div class="sectionActions"><button class="primary" onclick="editPersonnel('')">+ Add Personnel</button></div>`:''}${departmentGroupedRows(activePersonnelSorted(),p=>settingsRow({title:personName(p),role:personRole(p),dept:personDept(p),action:'personnel',recordId:p.PersonnelID}))}`;
-  const teamBody=`${state.admin?`<div class="sectionActions"><button class="primary" onclick="editTeam('')">+ Add Team</button></div>`:''}${settingsList(state.teams.map(t=>settingsRow({title:t.TeamName,role:t.TeamLead?`Usual lead: ${t.TeamLead}`:'No default lead',dept:t.Active==='N'?'Inactive':'Active',action:'team',recordId:t.TeamID})),'No teams yet.')}`;
-  const driverBody=`<div class="hint sectionNote">Drivers are personnel with Can Drive = Y. No separate Drivers sheet is needed.</div>${settingsList(driverPeople().map(p=>settingsRow({title:personName(p),role:personRole(p),dept:personDept(p),action:'personnel',recordId:p.PersonnelID})),'No driver-capable personnel yet.')}`;
-  const vehicleBody=`${state.admin?`<div class="sectionActions"><button class="primary" onclick="editVehicle('')">+ Add Vehicle</button></div>`:''}${settingsList(state.vehicles.map(v=>settingsRow({title:displayVehicle(v.VehicleID||v.VehicleCode)||v.VehicleLabel,role:v.PlateNo||'Vehicle',dept:v.Active==='N'?'Inactive':'Active',action:'vehicle',recordId:v.VehicleID})),'No vehicles yet.')}`;
-  const announcementBody=`${state.admin?`<div class="sectionActions"><button class="primary" onclick="editAnnouncement('')">+ Add Announcement</button></div>`:''}${settingsList(state.announcements.map(a=>settingsRow({title:a.Title,role:a.Active==='N'?'Inactive':'Active',dept:a.ExpiryDate?`Until ${a.ExpiryDate}`:'No expiry',action:'announcement',recordId:a.AnnouncementID})),'No announcements yet.')}`;
-  const processBody=`<div class="pillWrap compactPills">${PROCESS_COLUMNS.map(x=>`<span class="pill info">${escapeHtml(x)}</span>`).join('')}</div>${state.admin?`<div class="sectionActions"><button class="primary" onclick="editSetting('PROCESS_COLUMNS','Detailed Processes','Separate processes with |. Major Kanban stages remain fixed.')">Edit Processes</button></div>`:''}`;
-  const accessBody=state.admin?`<div class="sectionActions"><button class="primary" onclick="editSetting('ADMIN_PIN','Admin PIN','')">Change Admin PIN</button><button class="primary" onclick="editSetting('OFFICER_PIN','Officer PIN','')">Change Officer PIN</button></div>`:`<div class="hint">Admin access is required to change PINs.</div>`;
-  $('page-settings').innerHTML=`<div class="pageTitle"><div><h1>Settings</h1><div class="hint">The clean database keeps only master lists needed by the app. Team members and default vehicle passengers are assigned during actual work instead of being stored in separate sheets.</div></div></div>
-    <div class="settingsStack settingsTileGrid">
-      ${collapsible('Personnel',personnelBody,{count:state.personnel.length})}
-      ${collapsible('Teams',teamBody,{count:state.teams.length})}
-      ${collapsible('Drivers',driverBody,{count:driverPeople().length})}
-      ${collapsible('Vehicles',vehicleBody,{count:state.vehicles.length})}
-      ${collapsible('Announcements',announcementBody,{count:state.announcements.length})}
-      ${collapsible('Production Processes',processBody,{count:PROCESS_COLUMNS.length})}
-      ${collapsible('Access',accessBody,{count:2})}
-    </div>`;
+  const activeSorted=activePersonnelSorted();
+  const personnelBody=`${state.admin?'<div class="sectionActions"><button class="primary" onclick="editPersonnel(\'\')">+ Add Personnel</button></div>':''}${departmentGroupedRows(activeSorted,p=>{const idx=state.personnel.indexOf(p);return settingsRow({title:personName(p),role:`${personRole(p)} • ${primaryTeamName(p)}`,dept:personDept(p),action:'personnel',recordIndex:idx,recordId:p.PersonnelID});})}`;
+  const teamBody=`${state.admin?'<div class="sectionActions"><button class="primary" onclick="editTeam(\'\')">+ Add Team</button></div>':''}${settingsList(state.teams.map(t=>{const count=personnelForTeam(t.TeamID).length;return settingsRow({title:t.TeamName,role:t.TeamLead?`Lead: ${t.TeamLead}`:'No default lead',dept:`${count} member${count===1?'':'s'}`,action:'team',recordId:t.TeamID});}),'No teams yet.')}`;
+  const driverBody=`<div class="hint sectionNote">Drivers are personnel with Can Drive = Y.</div>${settingsList(driverPeople().map(p=>settingsRow({title:personName(p),role:personRole(p),dept:primaryTeamName(p),action:'personnel',recordIndex:state.personnel.indexOf(p),recordId:p.PersonnelID})),'No driver-capable personnel yet.')}`;
+  const vehicleBody=`${state.admin?'<div class="sectionActions"><button class="primary" onclick="editVehicle(\'\')">+ Add Vehicle</button></div>':''}${settingsList(state.vehicles.map(v=>settingsRow({title:displayVehicle(v.VehicleID||v.VehicleCode)||v.VehicleLabel,role:v.PlateNo||'Vehicle',dept:v.Active==='N'?'Inactive':'Active',action:'vehicle',recordId:v.VehicleID})),'No vehicles yet.')}`;
+  const announcementBody=`${state.admin?'<div class="sectionActions"><button class="primary" onclick="editAnnouncement(\'\')">+ Add Announcement</button></div>':''}${settingsList(state.announcements.map(a=>settingsRow({title:a.Title,role:a.Active==='N'?'Inactive':'Active',dept:a.ExpiryDate?`Until ${a.ExpiryDate}`:'No expiry',action:'announcement',recordId:a.AnnouncementID})),'No announcements yet.')}`;
+  const processBody=`<div class="pillWrap compactPills">${PROCESS_COLUMNS.map(x=>`<span class="pill info">${escapeHtml(x)}</span>`).join('')}</div>${state.admin?'<div class="sectionActions"><button class="primary" onclick="editSetting(\'PROCESS_COLUMNS\',\'Detailed Processes\',\'Separate processes with |. Major Kanban stages remain fixed.\')">Edit Processes</button></div>':''}`;
+  const accessBody=state.admin?'<div class="sectionActions"><button class="primary" onclick="editSetting(\'ADMIN_PIN\',\'Admin PIN\',\'\')">Change Admin PIN</button><button class="primary" onclick="editSetting(\'OFFICER_PIN\',\'Officer PIN\',\'\')">Change Officer PIN</button></div>':'<div class="hint">Admin access is required to change PINs.</div>';
+  $('page-settings').innerHTML=`<div class="pageTitle"><div><h1>Settings</h1><div class="hint">Personnel keep one primary team for roster purposes. Actual project items can still be assigned to any team or person.</div></div></div><div class="settingsStack settingsTileGrid">${collapsible('Personnel',personnelBody,{count:state.personnel.length})}${collapsible('Teams & Members',teamBody,{count:state.teams.length})}${collapsible('Drivers',driverBody,{count:driverPeople().length})}${collapsible('Vehicles',vehicleBody,{count:state.vehicles.length})}${collapsible('Announcements',announcementBody,{count:state.announcements.length})}${collapsible('Production Processes',processBody,{count:PROCESS_COLUMNS.length})}${collapsible('Access',accessBody,{count:2})}</div>`;
   bindSettingsRecordButtons();
 }
-function renderAbout(){$('page-about').innerHTML=`<div class="pageTitle"><div><h1>About</h1><div class="hint">System information and credits.</div></div></div><div class="panel aboutBox"><h2>SJTC Production Department Dashboard</h2><p><b>Version:</b> ${escapeHtml(APP_VERSION)}<br><b>Company:</b> SJTC Manufacturing Inc. / Focolare Carpentry</p><p>Version 3 uses item-level team assignments, immediate removal of delivered items from the active Kanban, a read-only Project History, and a clean nine-sheet Google Sheets database.</p><p><b>Developed by:</b> Engr. CK Empeynado</p></div>`;}
+function renderAbout(){$('page-about').innerHTML=`<div class="pageTitle"><div><h1>About</h1><div class="hint">System information and credits.</div></div></div><div class="panel aboutBox"><h2>SJTC Production Department Dashboard</h2><p><b>Version:</b> ${escapeHtml(APP_VERSION)}<br><b>Company:</b> SJTC Manufacturing Inc. / Focolare Carpentry</p><p>Version 3.0.2 uses item-level assignments, simple primary-team rosters, immediate removal of delivered items from the active Kanban, Project History, and a clean nine-sheet database.</p><p><b>Developed by:</b> Engr. CK Empeynado</p></div>`;}
 function openModal(id){$(id).style.display='flex';bindCloseButtons();applyFieldTips();}
 function closeModal(id){$(id).style.display='none';}
 function bindCloseButtons(){document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));}
