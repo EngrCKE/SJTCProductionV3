@@ -79,7 +79,7 @@ function demoApi(action, body){
       demo.personnel[idx] = {...demo.personnel[idx], ...p, UpdatedAt:nowISO()};
       return ok({personnel:demo.personnel[idx]});
     }
-    const row = { PersonnelID:`PER-${String(demo.personnel.length+1).padStart(4,"0")}`, PersonnelName:p.PersonnelName||"", Role:p.Role||"Personnel", Department:p.Department||"", ContactNumber:p.ContactNumber||"", CanDrive:p.CanDrive||"N", CanInstall:p.CanInstall||"N", Active:p.Active||"Y", CreatedAt:nowISO(), UpdatedAt:nowISO() };
+    const row = { PersonnelID:`PER-${String(demo.personnel.length+1).padStart(4,"0")}`, PersonnelName:p.PersonnelName||"", Role:p.Role||"Personnel", Department:p.Department||"", PrimaryTeamID:p.PrimaryTeamID||"", ContactNumber:p.ContactNumber||"", CanDrive:p.CanDrive||"N", CanInstall:p.CanInstall||"N", Active:p.Active||"Y", CreatedAt:nowISO(), UpdatedAt:nowISO() };
     demo.personnel.push(row); return ok({personnel:row});
   }
   if(action === "upsertVehicle"){
@@ -103,7 +103,18 @@ function demoApi(action, body){
     demo.vehiclePassengers.push(row); return ok({vehiclePassenger:row});
   }
   if(action === "productionBootstrap") return ok(JSON.parse(JSON.stringify(demo)));
-  if(action === "productionBootstrapV3"){ const data=JSON.parse(JSON.stringify(demo)); delete data.notes; delete data.logs; data.teamMembers=[]; data.vehiclePassengers=[]; data.meta={serverMs:1,version:APP_VERSION,lazyHistory:true,cleanSchema:true}; return ok(data); }
+
+  if(action === "saveTeamMembers"){
+    const teamId=String(body.teamId||"");
+    const selected=new Set((body.personnelIds||[]).map(String));
+    demo.personnel.forEach(p=>{
+      if(selected.has(String(p.PersonnelID))) p.PrimaryTeamID=teamId;
+      else if(String(p.PrimaryTeamID||"")===teamId) p.PrimaryTeamID="";
+    });
+    demo.teamMembers=demo.personnel.filter(p=>p.PrimaryTeamID).map((p,i)=>({TeamMemberID:`TM-${i+1}`,TeamID:p.PrimaryTeamID,PersonnelID:p.PersonnelID,MemberName:p.PersonnelName,Role:p.Role,Active:p.Active||"Y"}));
+    return ok({teamMembers:demo.teamMembers.filter(m=>m.TeamID===teamId)});
+  }
+  if(action === "productionBootstrapV3"){ const data=JSON.parse(JSON.stringify(demo)); delete data.notes; delete data.logs; data.teamMembers=(data.personnel||[]).filter(p=>p.PrimaryTeamID).map((p,i)=>({TeamMemberID:`TM-${i+1}`,TeamID:p.PrimaryTeamID,PersonnelID:p.PersonnelID,MemberName:p.PersonnelName,Role:p.Role,Active:p.Active||"Y"})); data.vehiclePassengers=[]; data.meta={serverMs:1,version:APP_VERSION,lazyHistory:true,cleanSchema:true}; return ok(data); }
   if(action === "productionBootstrapV2"){
     const data=JSON.parse(JSON.stringify(demo));
     delete data.notes;
