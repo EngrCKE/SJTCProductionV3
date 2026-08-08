@@ -4,7 +4,7 @@
  * Frontend for GitHub Pages
  * Set PRODUCTION_API_URL to your Cloudflare Worker URL after deployment.
  ***********************/
-const PRODUCTION_API_URL = "https://prodman.sjtc-kobempeynado.workers.dev/";
+const PRODUCTION_API_URL = "https://production.sjtc-kobempeynado.workers.dev/";
 const APP_VERSION = "3.0.5";
 // Logistics is now native to this Production Dashboard database.
 const ADMIN_PIN_KEY = "sjtc_production_access_pin";
