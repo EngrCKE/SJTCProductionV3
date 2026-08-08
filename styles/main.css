@@ -169,3 +169,61 @@ body.actionBusy{cursor:progress}body.actionBusy button{pointer-events:none}
 .tileTeam{font-size:9.5px;color:var(--muted);line-height:1.15;margin-top:2px;overflow-wrap:anywhere}
 .v3ItemRow{grid-template-columns:2fr .55fr .55fr 1.15fr 1.2fr 1.25fr 1fr 1.4fr auto}
 @media(max-width:1200px){.v3ItemRow{grid-template-columns:1fr 1fr}.v3ItemRow button{grid-column:1/-1}}
+
+/* v3.0.3 — sticky major-stage headers and compact SO groups */
+.kanbanWrap{
+  overflow:auto;
+  max-height:calc(100vh - 205px);
+  min-height:420px;
+  scroll-behavior:smooth;
+  overscroll-behavior:contain;
+}
+.kanban{align-items:stretch}
+.kanbanCol{align-self:stretch}
+.kanbanHead{
+  position:sticky;
+  top:0;
+  z-index:12;
+  background:rgba(22,59,44,.985);
+  backdrop-filter:blur(8px);
+  box-shadow:0 5px 12px rgba(3,12,8,.22);
+  border-radius:15px 15px 0 0;
+}
+.kanbanBody{padding:7px;gap:6px}
+.kanbanSOGroup{
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:11px;
+  background:rgba(15,46,34,.46);
+  overflow:hidden;
+}
+.kanbanSOSummary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:6px;
+  padding:7px 8px;
+  user-select:none;
+  background:rgba(255,255,255,.045);
+}
+.kanbanSOSummary::-webkit-details-marker{display:none}
+.kanbanSOInfo{display:flex;align-items:center;gap:5px;min-width:0}
+.kanbanSOChevron{font-size:16px;line-height:1;color:var(--muted);transform:rotate(0deg);transition:transform .15s ease}
+.kanbanSOGroup[open] .kanbanSOChevron{transform:rotate(90deg)}
+.kanbanSONumber{font-size:10.5px;font-weight:900;line-height:1.1;color:var(--txt)}
+.kanbanSOClient{font-size:9.5px;line-height:1.15;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:115px}
+.kanbanSOCount{font-size:9px;white-space:nowrap;color:var(--muted);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:2px 5px}
+.kanbanSOProcesses{font-size:8.5px;line-height:1.2;color:var(--muted);padding:5px 8px 0;overflow-wrap:anywhere}
+.kanbanSOItems{display:grid;gap:4px;padding:6px}
+.compactBoardTile{padding:5px 6px;display:grid;gap:3px;border-radius:8px}
+.compactBoardTile.dragging{opacity:.45}
+.compactTileTop{display:flex;justify-content:space-between;gap:5px;align-items:center;min-width:0}
+.compactTileClient{font-size:8.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px}
+.compactTileMain{display:grid;gap:3px;min-width:0}
+.compactBoardTile .tileItem{font-size:10.5px;margin:0;line-height:1.1}
+.compactProcessPill{font-size:8.5px;font-weight:900;color:#d6ffe9;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.compactTileAssign{font-size:8.5px;line-height:1.1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kanbanBody.dragOver{background:rgba(63,174,115,.08)}
+@media(max-height:650px){.kanbanWrap{max-height:calc(100vh - 165px);min-height:320px}}
+@media(max-width:900px){.kanbanWrap{max-height:70vh;min-height:420px}.kanbanHead{top:0}}
