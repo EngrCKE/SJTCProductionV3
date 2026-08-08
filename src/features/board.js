@@ -1,4 +1,4 @@
-/** SJTC Dashboard v3.0.0 — modular source */
+/** SJTC Dashboard v3.0.3 — sticky headers and SO-grouped Kanban */
 function processNamesForStage(stage){
   return [...(stage.processes || []), ...(stage.legacyProcesses || [])];
 }
@@ -59,28 +59,89 @@ function syncKanbanTopScrollbar(){
   wrap.onscroll = ()=>{ if(locked) return; locked = true; top.scrollLeft = wrap.scrollLeft; locked = false; };
 }
 
+function boardGroupKey(stageKey, soNumber){
+  return `${String(stageKey||"")}::${cleanSO(soNumber)}`;
+}
+function isBoardGroupCollapsed(stageKey, soNumber){
+  state.boardCollapsedGroups = state.boardCollapsedGroups || {};
+  return !!state.boardCollapsedGroups[boardGroupKey(stageKey, soNumber)];
+}
+function setBoardGroupCollapsed(stageKey, soNumber, collapsed){
+  state.boardCollapsedGroups = state.boardCollapsedGroups || {};
+  const key = boardGroupKey(stageKey, soNumber);
+  if(collapsed) state.boardCollapsedGroups[key] = true;
+  else delete state.boardCollapsedGroups[key];
+}
+function groupStageItemsBySO(items){
+  const groups=[];
+  const bySO=new Map();
+  items.forEach(item=>{
+    const so=cleanSO(item.SONumber) || "NO-SO";
+    if(!bySO.has(so)){
+      const group={so,items:[]};
+      bySO.set(so,group);
+      groups.push(group);
+    }
+    bySO.get(so).items.push(item);
+  });
+  return groups;
+}
 function renderKanbanStage(stage){
   const items = activeItems()
     .filter(i=>kanbanStageForProcess(i.ItemStatus)?.key===stage.key && boardItemMatchesSearch(i))
     .sort((a,b)=>String(a.SONumber||"").localeCompare(String(b.SONumber||""), undefined, {numeric:true}) || String((state.projects.find(p=>p.ProjectID===a.ProjectID)||{}).ClientName||"").localeCompare(String((state.projects.find(p=>p.ProjectID===b.ProjectID)||{}).ClientName||"")) || String(a.ItemDescription||"").localeCompare(String(b.ItemDescription||"")));
   const details = stage.processes.join(" • ");
-  return `<div class="kanbanCol"><div class="kanbanHead"><div><span>${escapeHtml(stage.label)}</span><div class="kanbanStageProcesses">${escapeHtml(details)}</div></div><span class="badge">${items.length}</span></div><div class="kanbanBody" data-stage="${escapeAttr(stage.key)}">${items.map(tileHTML).join("") || `<div class="hint">No items.</div>`}</div></div>`;
+  const groups = groupStageItemsBySO(items);
+  return `<div class="kanbanCol"><div class="kanbanHead"><div><span>${escapeHtml(stage.label)}</span><div class="kanbanStageProcesses">${escapeHtml(details)}</div></div><span class="badge">${items.length}</span></div><div class="kanbanBody" data-stage="${escapeAttr(stage.key)}">${groups.map(group=>renderSOGroup(stage,group)).join("") || `<div class="hint">No items.</div>`}</div></div>`;
 }
-function tileHTML(i){
+function renderSOGroup(stage, group){
+  const items=group.items || [];
+  if(items.length===1) return compactTileHTML(items[0], {showSO:true});
+  const p=state.projects.find(x=>String(x.ProjectID)===String(items[0].ProjectID))||{};
+  const collapsed=isBoardGroupCollapsed(stage.key,group.so);
+  const processes=[...new Set(items.map(i=>String(i.ItemStatus||"").trim()).filter(Boolean))];
+  return `<details class="kanbanSOGroup" data-so-group="${escapeAttr(group.so)}" data-stage-group="${escapeAttr(stage.key)}" ${collapsed?"":"open"}>
+    <summary class="kanbanSOSummary">
+      <div class="kanbanSOInfo"><span class="kanbanSOChevron">›</span><div><div class="kanbanSONumber">SO ${escapeHtml(group.so)}</div><div class="kanbanSOClient">${escapeHtml(p.ClientName||"")}</div></div></div>
+      <div class="kanbanSOCount">${items.length} items</div>
+    </summary>
+    <div class="kanbanSOProcesses">${escapeHtml(processes.join(" • "))}</div>
+    <div class="kanbanSOItems">${items.map(i=>compactTileHTML(i,{showSO:false})).join("")}</div>
+  </details>`;
+}
+function compactTileHTML(i, options={}){
   const p=state.projects.find(x=>x.ProjectID===i.ProjectID)||{};
-  return `<div class="tile smallTile" draggable="${canOfficer()}" data-item="${escapeAttr(i.ItemID)}" data-open-item="${escapeAttr(i.ItemID)}"><div class="tileSO">${escapeHtml(i.SONumber)}</div><div class="tileClient"><b>${escapeHtml(p.ClientName||"")}</b></div><div class="tileItem">${escapeHtml(i.ItemDescription)}</div><div class="tileProcess">${escapeHtml(i.ItemStatus||"Unspecified")}</div><div class="tileTeam">${escapeHtml(teamName(i.AssignedTeamID))} • ${escapeHtml(i.AssignedPersonnel||"Unassigned")}</div></div>`;
+  const team=teamName(i.AssignedTeamID);
+  const assignee=String(i.AssignedPersonnel||"").trim();
+  const tooltip=[`SO ${i.SONumber||""}`,p.ClientName||"",i.ItemDescription||"",`Process: ${i.ItemStatus||"Unspecified"}`,team?`Team: ${team}`:"",assignee?`Assigned: ${assignee}`:""].filter(Boolean).join(" | ");
+  return `<div class="tile smallTile compactBoardTile" draggable="${canOfficer()}" data-item="${escapeAttr(i.ItemID)}" data-open-item="${escapeAttr(i.ItemID)}" title="${escapeAttr(tooltip)}">
+    ${options.showSO?`<div class="compactTileTop"><span class="tileSO">SO ${escapeHtml(i.SONumber)}</span><span class="compactTileClient">${escapeHtml(p.ClientName||"")}</span></div>`:""}
+    <div class="compactTileMain"><span class="tileItem">${escapeHtml(i.ItemDescription)}</span><span class="compactProcessPill">${escapeHtml(i.ItemStatus||"Unspecified")}</span></div>
+    ${(team||assignee)?`<div class="compactTileAssign">${escapeHtml([team,assignee].filter(Boolean).join(" • "))}</div>`:""}
+  </div>`;
 }
+function tileHTML(i){ return compactTileHTML(i,{showSO:true}); }
 function bindKanbanDnD(){
+  document.querySelectorAll(".kanbanSOGroup").forEach(group=>{
+    group.addEventListener("toggle",()=>setBoardGroupCollapsed(group.dataset.stageGroup, group.dataset.soGroup, !group.open));
+  });
   if(!canOfficer()) return;
-  document.querySelectorAll(".tile").forEach(t=>{ t.addEventListener("dragstart", e=>{ e.dataTransfer.setData("text/plain", t.dataset.item); }); });
+  document.querySelectorAll(".tile[data-item]").forEach(t=>{
+    t.addEventListener("dragstart", e=>{
+      e.dataTransfer.effectAllowed="move";
+      e.dataTransfer.setData("text/plain", t.dataset.item);
+      t.classList.add("dragging");
+    });
+    t.addEventListener("dragend",()=>t.classList.remove("dragging"));
+  });
   document.querySelectorAll(".kanbanBody").forEach(zone=>{
-    zone.addEventListener("dragover", e=>{ e.preventDefault(); zone.classList.add("dragOver"); });
-    zone.addEventListener("dragleave", ()=>zone.classList.remove("dragOver"));
+    zone.addEventListener("dragover", e=>{ e.preventDefault(); e.dataTransfer.dropEffect="move"; zone.classList.add("dragOver"); });
+    zone.addEventListener("dragleave", e=>{ if(!zone.contains(e.relatedTarget)) zone.classList.remove("dragOver"); });
     zone.addEventListener("drop", e=>{
       e.preventDefault();
       zone.classList.remove("dragOver");
       const itemId=e.dataTransfer.getData("text/plain");
-      openMoveModal(itemId, zone.dataset.stage);
+      if(itemId) openMoveModal(itemId, zone.dataset.stage);
     });
   });
 }
