@@ -231,3 +231,29 @@ body.actionBusy{cursor:progress}body.actionBusy button{pointer-events:none}
 
 /* v3.0.4 production log register */
 .productionLogToolbar select{min-width:170px}.productionLogRegister table{min-width:1450px}.productionLogRegister tbody tr{cursor:default}.productionLogRegister tbody tr[data-production-log-item]{cursor:pointer}.productionLogRegister tbody tr:hover{background:rgba(255,255,255,.035)}.productionLogMiniTable{min-width:920px}.productionLogMiniTable th,.productionLogMiniTable td{font-size:12px;padding:8px 7px}.productionLogMiniTable .smallBtn{padding:5px 7px;font-size:11px}
+
+/* v3.0.6 — full-height Kanban drop targets */
+.kanbanWrap{
+  height:calc(100vh - 205px);
+  max-height:none;
+}
+.kanban{
+  min-height:100%;
+  align-items:stretch;
+}
+.kanbanCol{
+  min-height:100%;
+  transition:border-color .12s ease,background .12s ease,box-shadow .12s ease;
+}
+.kanbanBody{
+  flex:1 1 auto;
+  align-content:start;
+}
+.kanbanCol.dragOver{
+  border-color:rgba(63,174,115,.9);
+  background:rgba(63,174,115,.08);
+  box-shadow:inset 0 0 0 1px rgba(63,174,115,.24);
+}
+.kanbanCol.dragOver .kanbanBody{background:rgba(63,174,115,.05)}
+@media(max-height:650px){.kanbanWrap{height:calc(100vh - 165px);min-height:320px}}
+@media(max-width:900px){.kanbanWrap{height:70vh;min-height:420px}}
