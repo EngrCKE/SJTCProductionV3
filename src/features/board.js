@@ -1,4 +1,4 @@
-/** SJTC Dashboard v3.0.4 — sticky headers and SO-grouped Kanban */
+/** SJTC Dashboard v3.0.6 — full-height Kanban drop zones */
 function processNamesForStage(stage){
   return [...(stage.processes || []), ...(stage.legacyProcesses || [])];
 }
@@ -65,16 +65,12 @@ function boardGroupKey(stageKey, soNumber){
 function isBoardGroupCollapsed(stageKey, soNumber){
   state.boardCollapsedGroups = state.boardCollapsedGroups || {};
   const key = boardGroupKey(stageKey, soNumber);
-
-  // New SO groups are collapsed by default.
+  // Multi-item SO groups are collapsed by default.
   return state.boardCollapsedGroups[key] !== false;
 }
-
 function setBoardGroupCollapsed(stageKey, soNumber, collapsed){
   state.boardCollapsedGroups = state.boardCollapsedGroups || {};
   const key = boardGroupKey(stageKey, soNumber);
-
-  // Remember whether this SO group was opened or closed.
   state.boardCollapsedGroups[key] = collapsed;
 }
 function groupStageItemsBySO(items){
@@ -97,7 +93,7 @@ function renderKanbanStage(stage){
     .sort((a,b)=>String(a.SONumber||"").localeCompare(String(b.SONumber||""), undefined, {numeric:true}) || String((state.projects.find(p=>p.ProjectID===a.ProjectID)||{}).ClientName||"").localeCompare(String((state.projects.find(p=>p.ProjectID===b.ProjectID)||{}).ClientName||"")) || String(a.ItemDescription||"").localeCompare(String(b.ItemDescription||"")));
   const details = stage.processes.join(" • ");
   const groups = groupStageItemsBySO(items);
-  return `<div class="kanbanCol"><div class="kanbanHead"><div><span>${escapeHtml(stage.label)}</span><div class="kanbanStageProcesses">${escapeHtml(details)}</div></div><span class="badge">${items.length}</span></div><div class="kanbanBody" data-stage="${escapeAttr(stage.key)}">${groups.map(group=>renderSOGroup(stage,group)).join("") || `<div class="hint">No items.</div>`}</div></div>`;
+  return `<div class="kanbanCol" data-stage="${escapeAttr(stage.key)}"><div class="kanbanHead"><div><span>${escapeHtml(stage.label)}</span><div class="kanbanStageProcesses">${escapeHtml(details)}</div></div><span class="badge">${items.length}</span></div><div class="kanbanBody">${groups.map(group=>renderSOGroup(stage,group)).join("") || `<div class="hint">No items.</div>`}</div></div>`;
 }
 function renderSOGroup(stage, group){
   const items=group.items || [];
@@ -139,11 +135,23 @@ function bindKanbanDnD(){
     });
     t.addEventListener("dragend",()=>t.classList.remove("dragging"));
   });
-  document.querySelectorAll(".kanbanBody").forEach(zone=>{
-    zone.addEventListener("dragover", e=>{ e.preventDefault(); e.dataTransfer.dropEffect="move"; zone.classList.add("dragOver"); });
-    zone.addEventListener("dragleave", e=>{ if(!zone.contains(e.relatedTarget)) zone.classList.remove("dragOver"); });
+  // The entire major-stage column is a drop target, not only the tile/content area.
+  document.querySelectorAll(".kanbanCol[data-stage]").forEach(zone=>{
+    zone.addEventListener("dragenter", e=>{
+      e.preventDefault();
+      zone.classList.add("dragOver");
+    });
+    zone.addEventListener("dragover", e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect="move";
+      zone.classList.add("dragOver");
+    });
+    zone.addEventListener("dragleave", e=>{
+      if(!zone.contains(e.relatedTarget)) zone.classList.remove("dragOver");
+    });
     zone.addEventListener("drop", e=>{
       e.preventDefault();
+      e.stopPropagation();
       zone.classList.remove("dragOver");
       const itemId=e.dataTransfer.getData("text/plain");
       if(itemId) openMoveModal(itemId, zone.dataset.stage);
