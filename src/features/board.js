@@ -64,13 +64,18 @@ function boardGroupKey(stageKey, soNumber){
 }
 function isBoardGroupCollapsed(stageKey, soNumber){
   state.boardCollapsedGroups = state.boardCollapsedGroups || {};
-  return !!state.boardCollapsedGroups[boardGroupKey(stageKey, soNumber)];
+  const key = boardGroupKey(stageKey, soNumber);
+
+  // New SO groups are collapsed by default.
+  return state.boardCollapsedGroups[key] !== false;
 }
+
 function setBoardGroupCollapsed(stageKey, soNumber, collapsed){
   state.boardCollapsedGroups = state.boardCollapsedGroups || {};
   const key = boardGroupKey(stageKey, soNumber);
-  if(collapsed) state.boardCollapsedGroups[key] = true;
-  else delete state.boardCollapsedGroups[key];
+
+  // Remember whether this SO group was opened or closed.
+  state.boardCollapsedGroups[key] = collapsed;
 }
 function groupStageItemsBySO(items){
   const groups=[];
