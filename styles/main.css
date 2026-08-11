@@ -257,3 +257,19 @@ body.actionBusy{cursor:progress}body.actionBusy button{pointer-events:none}
 .kanbanCol.dragOver .kanbanBody{background:rgba(63,174,115,.05)}
 @media(max-height:650px){.kanbanWrap{height:calc(100vh - 165px);min-height:320px}}
 @media(max-width:900px){.kanbanWrap{height:70vh;min-height:420px}}
+
+
+/* v3.0.7 — collapsed SO group drag-and-drop */
+.kanbanSOGroup.soGroupDraggable{cursor:grab;border-color:rgba(255,255,255,.18)}
+.kanbanSOGroup.soGroupDraggable .kanbanSOSummary{cursor:grab}
+.kanbanSOGroup.soGroupDraggable:active,.kanbanSOGroup.draggingSO{cursor:grabbing}
+.kanbanSOGroup.draggingSO{opacity:.48}
+.kanbanSOGroup.soGroupDraggable:hover{border-color:rgba(112,220,164,.48);box-shadow:0 0 0 1px rgba(63,174,115,.12)}
+.bulkMoveHeader,.bulkMoveItemRow{display:grid;grid-template-columns:minmax(160px,1.6fr) minmax(130px,1fr) minmax(150px,1.15fr);gap:8px;align-items:center}
+.bulkMoveHeader{font-size:10px;color:var(--muted);font-weight:800;padding:0 4px 5px}
+.bulkMoveList{display:grid;gap:6px;max-height:300px;overflow:auto;padding-right:3px}
+.bulkMoveItemRow{padding:7px;border:1px solid rgba(255,255,255,.10);border-radius:9px;background:rgba(255,255,255,.025)}
+.bulkMoveItemName{display:grid;gap:2px;min-width:0}
+.bulkMoveItemName b{font-size:11px;overflow-wrap:anywhere}
+.bulkMoveItemName span{font-size:9px;color:var(--muted)}
+@media(max-width:720px){.bulkMoveHeader{display:none}.bulkMoveItemRow{grid-template-columns:1fr}.bulkMoveItemRow select,.bulkMoveItemRow input{width:100%}}
