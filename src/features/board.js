@@ -1,4 +1,4 @@
-/** SJTC Dashboard v3.0.6 — full-height Kanban drop zones */
+/** SJTC Dashboard v3.0.7 — draggable collapsed SO groups + full-height drop zones */
 function processNamesForStage(stage){
   return [...(stage.processes || []), ...(stage.legacyProcesses || [])];
 }
@@ -101,8 +101,9 @@ function renderSOGroup(stage, group){
   const p=state.projects.find(x=>String(x.ProjectID)===String(items[0].ProjectID))||{};
   const collapsed=isBoardGroupCollapsed(stage.key,group.so);
   const processes=[...new Set(items.map(i=>String(i.ItemStatus||"").trim()).filter(Boolean))];
-  return `<details class="kanbanSOGroup" data-so-group="${escapeAttr(group.so)}" data-stage-group="${escapeAttr(stage.key)}" ${collapsed?"":"open"}>
-    <summary class="kanbanSOSummary">
+  const groupItemIds=items.map(i=>String(i.ItemID||"")).filter(Boolean).join(",");
+  return `<details class="kanbanSOGroup" data-so-group="${escapeAttr(group.so)}" data-stage-group="${escapeAttr(stage.key)}" data-group-items="${escapeAttr(groupItemIds)}" draggable="${canOfficer() && collapsed}" ${collapsed?"":"open"}>
+    <summary class="kanbanSOSummary" title="${canOfficer() && collapsed ? "Drag this collapsed SO to move all items in this stage" : "Click to expand/collapse"}">
       <div class="kanbanSOInfo"><span class="kanbanSOChevron">›</span><div><div class="kanbanSONumber">SO ${escapeHtml(group.so)}</div><div class="kanbanSOClient">${escapeHtml(p.ClientName||"")}</div></div></div>
       <div class="kanbanSOCount">${items.length} items</div>
     </summary>
@@ -122,15 +123,50 @@ function compactTileHTML(i, options={}){
   </div>`;
 }
 function tileHTML(i){ return compactTileHTML(i,{showSO:true}); }
+function kanbanDragPayloadFromEvent(e){
+  try{
+    const raw=e.dataTransfer.getData("application/x-sjtc-kanban");
+    if(raw) return JSON.parse(raw);
+  }catch(_){ }
+  const fallback=e.dataTransfer.getData("text/plain") || "";
+  if(fallback.startsWith("GROUP:")) return {type:"group",itemIds:fallback.slice(6).split(",").filter(Boolean)};
+  if(fallback.startsWith("ITEM:")) return {type:"item",itemId:fallback.slice(5)};
+  return fallback ? {type:"item",itemId:fallback} : null;
+}
+function setKanbanDragPayload(e,payload){
+  e.dataTransfer.effectAllowed="move";
+  try{ e.dataTransfer.setData("application/x-sjtc-kanban", JSON.stringify(payload)); }catch(_){ }
+  if(payload.type==="group") e.dataTransfer.setData("text/plain", `GROUP:${(payload.itemIds||[]).join(",")}`);
+  else e.dataTransfer.setData("text/plain", `ITEM:${payload.itemId||""}`);
+}
 function bindKanbanDnD(){
   document.querySelectorAll(".kanbanSOGroup").forEach(group=>{
-    group.addEventListener("toggle",()=>setBoardGroupCollapsed(group.dataset.stageGroup, group.dataset.soGroup, !group.open));
+    const syncGroupDrag=()=>{
+      const canDrag=canOfficer() && !group.open;
+      group.draggable=canDrag;
+      group.classList.toggle("soGroupDraggable",canDrag);
+    };
+    group.addEventListener("toggle",()=>{
+      setBoardGroupCollapsed(group.dataset.stageGroup, group.dataset.soGroup, !group.open);
+      syncGroupDrag();
+    });
+    syncGroupDrag();
+    if(canOfficer()){
+      group.addEventListener("dragstart",e=>{
+        if(group.open || e.target.closest(".tile[data-item]")) return;
+        const itemIds=String(group.dataset.groupItems||"").split(",").filter(Boolean);
+        if(!itemIds.length){ e.preventDefault(); return; }
+        setKanbanDragPayload(e,{type:"group",itemIds,so:group.dataset.soGroup,sourceStage:group.dataset.stageGroup});
+        group.classList.add("draggingSO");
+      });
+      group.addEventListener("dragend",()=>group.classList.remove("draggingSO"));
+    }
   });
   if(!canOfficer()) return;
   document.querySelectorAll(".tile[data-item]").forEach(t=>{
     t.addEventListener("dragstart", e=>{
-      e.dataTransfer.effectAllowed="move";
-      e.dataTransfer.setData("text/plain", t.dataset.item);
+      e.stopPropagation();
+      setKanbanDragPayload(e,{type:"item",itemId:t.dataset.item});
       t.classList.add("dragging");
     });
     t.addEventListener("dragend",()=>t.classList.remove("dragging"));
@@ -153,8 +189,10 @@ function bindKanbanDnD(){
       e.preventDefault();
       e.stopPropagation();
       zone.classList.remove("dragOver");
-      const itemId=e.dataTransfer.getData("text/plain");
-      if(itemId) openMoveModal(itemId, zone.dataset.stage);
+      const payload=kanbanDragPayloadFromEvent(e);
+      if(!payload) return;
+      if(payload.type==="group") openMoveSOGroupModal(payload.itemIds||[], zone.dataset.stage, payload.so||"");
+      else if(payload.itemId) openMoveModal(payload.itemId, zone.dataset.stage);
     });
   });
 }
@@ -243,6 +281,30 @@ async function saveProductionLogEdit(){
   }
 }
 
+function openMoveSOGroupModal(itemIds,stageKey,soNumber=""){
+  if(!canOfficer()) return alert("Officer or Admin access is required to move production items.");
+  const stage=KANBAN_STAGES.find(s=>s.key===stageKey);
+  const items=(itemIds||[]).map(id=>state.items.find(i=>String(i.ItemID)===String(id))).filter(Boolean);
+  if(!stage || !items.length) return;
+  const available=stage.processes || [];
+  const selected=available[0] || "";
+  state.pendingMove={mode:"group",itemIds:items.map(i=>i.ItemID),toStatus:selected,stageKey,soNumber:cleanSO(soNumber || items[0].SONumber)};
+  const options=available.map(process=>`<option value="${escapeAttr(process)}">${escapeHtml(process)}</option>`).join("");
+  const rows=items.map(item=>`<div class="bulkMoveItemRow" data-bulk-move-item="${escapeAttr(item.ItemID)}">
+      <div class="bulkMoveItemName"><b>${escapeHtml(item.ItemDescription||item.ItemID)}</b><span>${escapeHtml(item.ItemStatus||"Blank")}</span></div>
+      <select class="bulkMoveTeam">${activeTeamOptions(item.AssignedTeamID)}</select>
+      <input class="bulkMovePersonnel" list="personnelNames" value="${escapeAttr(item.AssignedPersonnel||"")}" placeholder="Person in charge" />
+    </div>`).join("");
+  $("moveModalBody").innerHTML=`
+    <div class="panel"><div class="cardTitle">Move SO ${escapeHtml(state.pendingMove.soNumber)} — ${items.length} items</div><div class="small">All items inside the collapsed SO card will move together. Items from this SO that are already in other Kanban columns are not included.<br>Target major stage: <b>${escapeHtml(stage.label)}</b></div></div>
+    <div><label>Detailed Process for All Items</label><select id="moveToStatusSelect">${options}</select></div>
+    <div><label>Team / Person in Charge per Item</label><div class="bulkMoveHeader"><span>Item / Current Process</span><span>Team</span><span>Person in Charge</span></div><div class="bulkMoveList">${rows}</div></div>
+    ${personnelDatalist()}
+    <div><label>Remarks for All Items</label><textarea id="moveRemarks" placeholder="Optional remarks"></textarea></div>
+    <div class="hint">Each item is saved as its own production movement. The previous process is ended and the selected process is started separately for every item, preserving individual production logs.${stage.key==="Delivery"?" Moving the group to Delivery also places the items in Logistics → Items for Delivery.":""}</div>`;
+  openModal("moveModal");
+}
+
 function openMoveModal(itemId,stageKey){
   const item=state.items.find(i=>i.ItemID===itemId);
   const stage=KANBAN_STAGES.find(s=>s.key===stageKey);
@@ -285,14 +347,55 @@ function openMoveToSelectorModal(itemId){
 
 async function confirmMove(){
   if(!state.pendingMove) return;
-  const select = $("moveToStatusSelect");
-  if(select) state.pendingMove.toStatus = select.value;
-  const item = state.items.find(i=>i.ItemID===state.pendingMove.itemId);
-  if(item && String(item.ItemStatus||"") === String(state.pendingMove.toStatus||"")) return alert("Please select a different process.");
+  const select=$("moveToStatusSelect");
+  if(select) state.pendingMove.toStatus=select.value;
+
+  if(state.pendingMove.mode==="group"){
+    const toStatus=state.pendingMove.toStatus;
+    const remarks=$("moveRemarks") ? $("moveRemarks").value.trim() : "";
+    const rows=Array.from(document.querySelectorAll("[data-bulk-move-item]"));
+    const moves=rows.map(row=>{
+      const itemId=row.dataset.bulkMoveItem;
+      const item=state.items.find(i=>String(i.ItemID)===String(itemId));
+      const assignedTeamId=row.querySelector(".bulkMoveTeam")?.value || "";
+      const assignedPersonnel=row.querySelector(".bulkMovePersonnel")?.value.trim() || "";
+      return {item,itemId,assignedTeamId,assignedPersonnel};
+    }).filter(x=>x.item);
+    if(!moves.length) return alert("No items were found in this SO group.");
+    const missing=moves.filter(x=>!x.assignedTeamId && !x.assignedPersonnel);
+    if(missing.length) return alert(`Assign a team or person for: ${missing.map(x=>x.item.ItemDescription||x.itemId).join(", ")}`);
+    const actionable=moves.filter(x=>
+      String(x.item.ItemStatus||"")!==String(toStatus||"") ||
+      String(x.item.AssignedTeamID||"")!==String(x.assignedTeamId||"") ||
+      String(x.item.AssignedPersonnel||"")!==String(x.assignedPersonnel||"")
+    );
+    if(!actionable.length) return alert("All items already have this process and assignment. Choose a different process or assignment.");
+
+    const failed=[];
+    for(const move of actionable){
+      try{
+        await api("moveProductionItem",{
+          pin:accessPin(), itemId:move.itemId, toStatus,
+          assignedTeamId:move.assignedTeamId, assignedPersonnel:move.assignedPersonnel,
+          remarks, movedBy:state.accessLevel==="admin"?"Admin":"Officer"
+        });
+      }catch(err){ failed.push({move,err}); }
+    }
+    state.pendingMove=null;
+    state.productionLogsLoaded=false;
+    closeModal("moveModal");
+    await load();
+    if(failed.length){
+      alert(`${actionable.length-failed.length} item(s) moved successfully. ${failed.length} item(s) failed and stayed in their previous state:\n- ${failed.map(x=>x.move.item.ItemDescription||x.move.itemId).join("\n- ")}`);
+    }
+    return;
+  }
+
+  const item=state.items.find(i=>i.ItemID===state.pendingMove.itemId);
+  if(item && String(item.ItemStatus||"")===String(state.pendingMove.toStatus||"")) return alert("Please select a different process.");
   const assignedPersonnel=$("movePersonnel").value.trim();
   const assignedTeamId=$("moveTeam") ? $("moveTeam").value : (item?.AssignedTeamID || "");
   if(!assignedPersonnel && !assignedTeamId) return alert("Assign a team or a person before moving the item.");
   await api("moveProductionItem", { pin:accessPin(), itemId:state.pendingMove.itemId, toStatus:state.pendingMove.toStatus, assignedTeamId, assignedPersonnel, remarks:$("moveRemarks").value.trim(), movedBy:state.accessLevel==="admin"?"Admin":"Officer" });
   state.pendingMove=null; state.productionLogsLoaded=false; closeModal("moveModal"); await load();
 }
-
