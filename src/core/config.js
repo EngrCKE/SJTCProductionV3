@@ -1,11 +1,11 @@
-/** SJTC Dashboard v3.0.6 — modular source */
+/** SJTC Dashboard v3.0.7 — modular source */
 /***********************
- * SJTC Production Department Dashboard v3.0.6
+ * SJTC Production Department Dashboard v3.0.7
  * Frontend for GitHub Pages
  * Set PRODUCTION_API_URL to your Cloudflare Worker URL after deployment.
  ***********************/
 const PRODUCTION_API_URL = "https://production.sjtc-kobempeynado.workers.dev/";
-const APP_VERSION = "3.0.6";
+const APP_VERSION = "3.0.7";
 // Logistics is now native to this Production Dashboard database.
 const ADMIN_PIN_KEY = "sjtc_production_access_pin";
 const DEMO_PIN = "123456";
