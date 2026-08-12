@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SJTC Production Department Dashboard v3.0.9</title>
+  <link rel="stylesheet" href="styles/main.css?v=3.0.9" />
+</head>
+<body>
+<div class="appShell">
+  <aside class="sideNav" id="sideNav">
+    <div class="sideBrand">
+      <button id="btnSidebarToggle" class="sideToggle" title="Collapse / expand side panel">☰</button>
+      <div class="brandText">
+        <div class="title">SJTC Production</div>
+        <div class="subtitle">Department Dashboard</div>
+      </div>
+    </div>
+    <nav class="navList" id="navTabs">
+      <button class="navBtn active" data-page="overview"><span class="navIcon">⌂</span><span class="navText">Overview</span></button>
+      <button class="navBtn" data-page="projects"><span class="navIcon">▦</span><span class="navText">Projects</span></button>
+      <button class="navBtn" data-page="board"><span class="navIcon">⇄</span><span class="navText">Production Board</span></button>
+      <button class="navBtn" data-page="production-logs"><span class="navIcon">≡</span><span class="navText">Production Logs</span></button>
+      <button class="navBtn" data-page="logistics"><span class="navIcon">▣</span><span class="navText">Logistics</span></button>
+      <button class="navBtn" data-page="history"><span class="navIcon">↺</span><span class="navText">Project History</span></button>
+      <button class="navBtn" data-page="settings"><span class="navIcon">⚙</span><span class="navText">Settings</span></button>
+      <button class="navBtn" data-page="about"><span class="navIcon">i</span><span class="navText">About</span></button>
+    </nav>
+    <div class="sideFoot">
+      <span class="badge" id="adminBadge">Access: Staff</span>
+      <span class="badge" id="syncBadge">Sync idle</span>
+    </div>
+  </aside>
+
+  <div class="mainShell">
+    <header>
+      <div class="headerTop">
+        <div>
+          <div class="title">SJTC Production Department Dashboard</div>
+          <div class="subtitle">Production • Projects • Logistics <span class="versionChip">v3.0.9</span></div>
+        </div>
+        <div class="spacer"></div>
+        <button id="btnRefresh">Refresh</button>
+        <button class="primary" id="btnAdmin">Login</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="page-overview" class="page active"></section>
+      <section id="page-projects" class="page"></section>
+      <section id="page-board" class="page"></section>
+      <section id="page-production-logs" class="page"></section>
+      <section id="page-logistics" class="page"></section>
+      <section id="page-history" class="page"></section>
+      <section id="page-settings" class="page"></section>
+      <section id="page-about" class="page"></section>
+      <footer>© 2026 SJTC Manufacturing Inc. / Focolare Carpentry • Developed by <b>Engr. CK Empeynado</b></footer>
+    </main>
+  </div>
+</div>
+
+<div class="modalBg" id="adminModal">
+  <div class="modal smallModal">
+    <div class="modalH"><b>Access Login</b><span class="spacer"></span><span class="badge">PIN protected</span></div>
+    <div class="modalB">
+      <label>Access PIN</label>
+      <input id="adminPinInput" type="password" placeholder="Enter Officer or Admin PIN" />
+      <div class="hint">Officer Mode allows production/logistics updates. Admin Mode allows full system control.</div>
+    </div>
+    <div class="modalF">
+      <button data-close="adminModal">Close</button>
+      <button class="danger" id="btnAdminOff">Log Out</button>
+      <button class="ok" id="btnAdminLogin">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="projectModal">
+  <div class="modal">
+    <div class="modalH"><b id="projectModalTitle">Project Details</b><span class="spacer"></span><span class="badge" id="projectModalBadge"></span></div>
+    <div class="modalB" id="projectModalBody"></div>
+    <div class="modalF" id="projectModalFooter"></div>
+  </div>
+</div>
+
+<div class="modalBg" id="projectFormModal">
+  <div class="modal">
+    <div class="modalH"><b id="projectFormTitle">Project Form</b></div>
+    <div class="modalB" id="projectFormBody"></div>
+    <div class="modalF">
+      <button data-close="projectFormModal">Close</button>
+      <button class="ok" id="btnSaveProject">Save Project</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="itemEditorModal">
+  <div class="modal wideModal">
+    <div class="modalH"><b id="itemEditorTitle">Edit Items</b></div>
+    <div class="modalB" id="itemEditorBody"></div>
+    <div class="modalF">
+      <button data-close="itemEditorModal">Close</button>
+      <button class="ok" id="btnSaveProjectItems">Save Items</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="itemDetailModal">
+  <div class="modal">
+    <div class="modalH"><b id="itemDetailTitle">Item Details</b></div>
+    <div class="modalB" id="itemDetailBody"></div>
+    <div class="modalF">
+      <button data-close="itemDetailModal">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Edit Production Log Modal -->
+<div class="modalBg" id="editLogModal">
+  <div class="modal smallModal">
+    <div class="modalH"><b>Edit Production Log</b></div>
+    <div class="modalB" id="editLogModalBody"></div>
+    <div class="modalF">
+      <button data-close="editLogModal">Cancel</button>
+      <button class="ok" id="btnSaveProductionLogEdit">Save Correction</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="moveModal">
+  <div class="modal smallModal">
+    <div class="modalH"><b>Confirm Process Movement</b></div>
+    <div class="modalB" id="moveModalBody"></div>
+    <div class="modalF">
+      <button data-close="moveModal">Cancel</button>
+      <button class="ok" id="btnConfirmMove">Confirm Move</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="logisticsRequestModal">
+  <div class="modal">
+    <div class="modalH"><b>Submit Logistics Request</b><span class="spacer"></span><span class="badge">Status: PENDING</span></div>
+    <div class="modalB" id="logisticsRequestBody"></div>
+    <div class="modalF">
+      <button data-close="logisticsRequestModal">Close</button>
+      <button class="ok" id="btnSubmitLogisticsRequest">Submit Request</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="logisticsScheduleModal">
+  <div class="modal smallModal">
+    <div class="modalH"><b>Schedule Logistics Request</b></div>
+    <div class="modalB" id="logisticsScheduleBody"></div>
+    <div class="modalF">
+      <button data-close="logisticsScheduleModal">Cancel</button>
+      <button class="ok" id="btnConfirmScheduleRequest">Confirm Schedule</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modalBg" id="logisticsDetailModal">
+  <div class="modal">
+    <div class="modalH"><b id="logisticsDetailTitle">Logistics Request Details</b><span class="spacer"></span><span class="badge" id="logisticsDetailStatus"></span></div>
+    <div class="modalB" id="logisticsDetailBody"></div>
+    <div class="modalF" id="logisticsDetailFooter">
+      <button data-close="logisticsDetailModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="loadingOverlay" class="loadingOverlay" style="display:none;">
+  <div class="loadingCard">
+    <div class="spinner"></div>
+    <div class="loadingText">Loading...</div>
+  </div>
+</div>
+<script src="src/core/config.js?v=3.0.9"></script>
+<script src="src/core/api.js?v=3.0.9"></script>
+<script src="src/core/runtime.js?v=3.0.9"></script>
+<script src="src/features/overview.js?v=3.0.9"></script>
+<script src="src/features/projects.js?v=3.0.9"></script>
+<script src="src/features/board.js?v=3.0.9"></script>
+<script src="src/features/production_logs.js?v=3.0.9"></script>
+<script src="src/features/logistics.js?v=3.0.9"></script>
+<script src="src/features/history.js?v=3.0.9"></script>
+<script src="src/features/settings.js?v=3.0.9"></script>
+<script src="src/main.js?v=3.0.9"></script>
+</body>
+</html>
