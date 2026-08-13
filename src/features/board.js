@@ -377,6 +377,14 @@ async function confirmMove(){
         itemId:move.itemId, assignedTeamId:move.assignedTeamId, assignedPersonnel:move.assignedPersonnel
       }))
     });
+    // Invalidate per-item production-log caches for every moved item.
+    // Without this, item details can keep showing the pre-move log as "Ongoing"
+    // even after History_V3 has already been closed correctly.
+    state.loadedItemLogs = state.loadedItemLogs || {};
+    actionable.forEach(move=>{
+      state.loadedItemLogs[String(move.itemId)] = false;
+      state.logs = (state.logs || []).filter(l=>String(l.ItemID)!==String(move.itemId));
+    });
     state.pendingMove=null;
     state.productionLogsLoaded=false;
     closeModal("moveModal");
@@ -393,6 +401,11 @@ async function confirmMove(){
   const assignedPersonnel=$("movePersonnel").value.trim();
   const assignedTeamId=$("moveTeam") ? $("moveTeam").value : (item?.AssignedTeamID || "");
   if(!assignedPersonnel && !assignedTeamId) return alert("Assign a team or a person before moving the item.");
-  await api("moveProductionItem", { pin:accessPin(), itemId:state.pendingMove.itemId, toStatus:state.pendingMove.toStatus, assignedTeamId, assignedPersonnel, remarks:$("moveRemarks").value.trim(), movedBy:state.accessLevel==="admin"?"Admin":"Officer" });
+  const movedItemId=state.pendingMove.itemId;
+  await api("moveProductionItem", { pin:accessPin(), itemId:movedItemId, toStatus:state.pendingMove.toStatus, assignedTeamId, assignedPersonnel, remarks:$("moveRemarks").value.trim(), movedBy:state.accessLevel==="admin"?"Admin":"Officer" });
+  // Force the next item-detail view to fetch fresh movement logs from History_V3.
+  state.loadedItemLogs = state.loadedItemLogs || {};
+  state.loadedItemLogs[String(movedItemId)] = false;
+  state.logs = (state.logs || []).filter(l=>String(l.ItemID)!==String(movedItemId));
   state.pendingMove=null; state.productionLogsLoaded=false; closeModal("moveModal"); await load();
 }
