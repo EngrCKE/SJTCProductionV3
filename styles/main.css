@@ -273,3 +273,34 @@ body.actionBusy{cursor:progress}body.actionBusy button{pointer-events:none}
 .bulkMoveItemName b{font-size:11px;overflow-wrap:anywhere}
 .bulkMoveItemName span{font-size:9px;color:var(--muted)}
 @media(max-width:720px){.bulkMoveHeader{display:none}.bulkMoveItemRow{grid-template-columns:1fr}.bulkMoveItemRow select,.bulkMoveItemRow input{width:100%}}
+
+/* v3.0.8 hotfix — keep Logistics cards inside their columns */
+.logisticsPendingPanel{
+  min-width:0;
+  overflow:hidden;
+}
+.logisticsPendingPanel .pendingList{
+  width:100%;
+  min-width:0;
+  overflow:hidden;
+}
+.logisticsPendingPanel .compactLogisticsTile{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow:hidden;
+}
+.logisticsPendingPanel .compactLogisticsTile > *,
+.logisticsCalendarPanel .compactLogisticsTile > *{
+  min-width:0;
+  max-width:100%;
+}
+.pendingList .compactLogisticsTile .logTitle,
+.pendingList .compactLogisticsTile .logType,
+.pendingList .compactLogisticsTile .logLine{
+  white-space:normal !important;
+  overflow:hidden;
+  text-overflow:clip;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
