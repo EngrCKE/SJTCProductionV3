@@ -214,8 +214,10 @@ function openLogisticsDetailModal(requestId){
   $("logisticsDetailBody").innerHTML = `<div class="detailGrid">${requestHtml}${scheduleHtml}</div>`;
   const statusUpper = String(r.Status || "").toUpperCase();
   const canMarkDelivered = canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper);
-  $("logisticsDetailFooter").innerHTML = `<button data-close="logisticsDetailModal">Close</button>${canOfficer()?`<button class="primary" id="btnEditLogisticsFromDetail">Edit / Reschedule</button><button id="btnReturnLogisticsPending">Return to Pending</button>`:""}${canMarkDelivered?`<button class="ok" id="btnMarkLogisticsDelivered">Mark as Delivered</button>`:""}${state.admin?`<button class="danger" id="btnCancelLogisticsRequest">Cancel Request</button><button class="danger" id="btnDeleteLogisticsRequest">Delete Request</button>`:""}`;
+  const canEditRequestDetails = canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper);
+  $("logisticsDetailFooter").innerHTML = `<button data-close="logisticsDetailModal">Close</button>${canEditRequestDetails?`<button class="primary" id="btnEditLogisticsDetails">Edit Request Details</button>`:""}${canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper)?`<button id="btnEditLogisticsFromDetail">Schedule / Reschedule</button><button id="btnReturnLogisticsPending">Return to Pending</button>`:""}${canMarkDelivered?`<button class="ok" id="btnMarkLogisticsDelivered">Mark as Delivered</button>`:""}${state.admin?`<button class="danger" id="btnCancelLogisticsRequest">Cancel Request</button><button class="danger" id="btnDeleteLogisticsRequest">Delete Request</button>`:""}`;
   bindCloseButtons();
+  if(canEditRequestDetails && $("btnEditLogisticsDetails")) $("btnEditLogisticsDetails").onclick=()=>openEditLogisticsRequestDetails(requestId);
   if(canOfficer() && $("btnEditLogisticsFromDetail")) $("btnEditLogisticsFromDetail").onclick=()=>{ closeModal("logisticsDetailModal"); openScheduleModal(requestId, r.StartDT ? ymd(new Date(r.StartDT)) : ymd(new Date())); };
   if(canOfficer() && $("btnReturnLogisticsPending")) $("btnReturnLogisticsPending").onclick=()=>returnLogisticsRequestToPending(requestId);
   if(canMarkDelivered && $("btnMarkLogisticsDelivered")) $("btnMarkLogisticsDelivered").onclick=(e)=>runAction(e,"Marking delivered...",async()=>markLogisticsRequestDelivered(requestId));
@@ -223,7 +225,153 @@ function openLogisticsDetailModal(requestId){
   if(state.admin && $("btnDeleteLogisticsRequest")) $("btnDeleteLogisticsRequest").onclick=()=>deleteLogisticsRequest(requestId);
   openModal("logisticsDetailModal");
 }
+function setLogisticsRequestModalMode(mode, status="PENDING"){
+  const modal = $("logisticsRequestModal");
+  if(!modal) return;
+  const title = modal.querySelector(".modalH b");
+  const badge = modal.querySelector(".modalH .badge");
+  const button = $("btnSubmitLogisticsRequest");
+  if(mode === "edit"){
+    if(title) title.textContent = "Edit Logistics Request Details";
+    if(badge) badge.textContent = `Status: ${status || ""}`;
+    if(button){
+      button.textContent = "Save Changes";
+      button.onclick = (e)=>runAction(e,"Saving request details...", saveLogisticsRequestDetails);
+    }
+  }else{
+    if(title) title.textContent = "Submit Logistics Request";
+    if(badge) badge.textContent = "Status: PENDING";
+    if(button){
+      button.textContent = "Submit Request";
+      button.onclick = (e)=>runAction(e,"Submitting logistics request...", submitLogisticsRequest);
+    }
+  }
+}
+function selectValue(id,value){
+  const el=$(id); if(!el) return;
+  const wanted=String(value||"");
+  const option=Array.from(el.options||[]).find(o=>String(o.value)===wanted || String(o.textContent)===wanted);
+  if(option) el.value=option.value;
+}
+function renderLogisticsEditDeliveryItems(project, payload){
+  const box=$("lrItemPicker");
+  if(!box) return;
+  const currentIds=new Set((Array.isArray(payload.ItemIDs)?payload.ItemIDs:[]).map(String));
+  if(!project){
+    box.innerHTML=`<div class="hint">This request is not linked to a current project. Existing item links will be preserved.</div>`;
+    if($("lrItems")) $("lrItems").readOnly=false;
+    return;
+  }
+  const items=projectItems(project.ProjectID).filter(i=>i.Active!=="N" && (currentIds.has(String(i.ItemID)) || (String(i.ItemStatus||"")==="Delivery" && !isDeliveredItem(i))));
+  if(!items.length){
+    box.innerHTML=`<div class="hint">No current project items are available to change. Existing item links will be preserved.</div>`;
+    if($("lrItems")) $("lrItems").readOnly=false;
+    return;
+  }
+  box.innerHTML=`
+    <div class="line" style="justify-content:space-between;margin-bottom:8px">
+      <h3 style="margin:0">Items Included in Request</h3>
+      <div class="line"><button type="button" id="lrSelectAllItems">Select all</button><button type="button" id="lrClearItems">Clear</button></div>
+    </div>
+    <div class="hint" style="margin-bottom:8px">You can add or remove items from this logistics request. This does not delete the production item itself.</div>
+    ${items.map(i=>`<label class="checkLine compactCheck"><input type="checkbox" class="lrSelectedItem" value="${escapeAttr(i.ItemID)}" ${currentIds.has(String(i.ItemID))?"checked":""} /> <span><b>${escapeHtml(i.ItemDescription)}</b> <span class="small">${escapeHtml(i.Quantity||"")} ${escapeHtml(i.Unit||"")} • ${escapeHtml(i.ItemStatus||"—")}</span></span></label>`).join("")}`;
+  box.querySelectorAll(".lrSelectedItem").forEach(ch=>ch.addEventListener("change",syncDeliveryItemsTextarea));
+  if($("lrSelectAllItems")) $("lrSelectAllItems").onclick=()=>{ box.querySelectorAll(".lrSelectedItem").forEach(ch=>ch.checked=true); syncDeliveryItemsTextarea(); };
+  if($("lrClearItems")) $("lrClearItems").onclick=()=>{ box.querySelectorAll(".lrSelectedItem").forEach(ch=>ch.checked=false); syncDeliveryItemsTextarea(); };
+  syncDeliveryItemsTextarea();
+}
+function editDeliveryAutofillFromSO(){
+  const project=findProjectBySO(val("lrSO"));
+  const status=$("lrSOStatus");
+  if(!project){
+    if(status) status.textContent=val("lrSO")?"No matching project found. Existing request details were not overwritten.":"";
+    return;
+  }
+  if($("lrProjectID")) $("lrProjectID").value=project.ProjectID||"";
+  if($("lrClient")) $("lrClient").value=project.ClientName||"";
+  if($("lrContact")) $("lrContact").value=project.ContactNumber||"";
+  if($("lrAddress")) $("lrAddress").value=project.DeliveryAddress||projectSiteAddress(project)||"";
+  if(status) status.textContent=`Changed to SO# ${cleanSO(project.SONumber)}. Project details were auto-filled.`;
+  renderLogisticsEditDeliveryItems(project,{ItemIDs:[]});
+}
+function openEditLogisticsRequestDetails(requestId){
+  if(!canOfficer()) return alert(requireOfficerMessage());
+  const r=state.logisticsRequests.find(x=>x.RequestID===requestId); if(!r) return alert("Logistics request not found.");
+  const statusUpper=String(r.Status||"").toUpperCase();
+  if(["DELIVERED","CANCELLED"].includes(statusUpper)) return alert("Delivered or cancelled requests are read-only.");
+  const p=r.Payload||{};
+  state.editingLogisticsRequestId=requestId;
+  setLogisticsRequestModalMode("edit",r.Status||"");
+  closeModal("logisticsDetailModal");
+  const type=displayType(r.Type)||r.Type||"Delivery";
+  let fields="";
+  if(type==="Delivery"){
+    fields=`<input type="hidden" id="lrProjectID" value="${escapeAttr(p.ProjectID||r.ProjectID||"")}" />
+      <div class="twoCol">
+        <div><label>SO# / Number only</label><input id="lrSO" value="${escapeAttr(cleanSO(p.SONumber||r.SONumber||""))}" /><div class="hint" id="lrSOStatus">Change the SO# only if this request was linked to the wrong project.</div></div>
+        <div><label>Client Name</label><input id="lrClient" value="${escapeAttr(p.ClientName||"")}" /></div>
+        <div><label>Contact Number</label><input id="lrContact" value="${escapeAttr(p.ContactNumber||"")}" /></div>
+        <div><label>Delivery Address</label><textarea id="lrAddress" rows="3">${escapeHtml(p.Address||"")}</textarea></div>
+        <div><label>Area</label><select id="lrArea"><option value="NON_NCR">Non-NCR</option><option value="NCR">NCR</option></select></div>
+      </div>
+      <div class="panel" id="lrItemPicker"></div>
+      <div><label>Items to Deliver</label><textarea id="lrItems" readonly></textarea></div>
+      <div><label>Special Instructions</label><textarea id="lrNotes">${escapeHtml(p.Notes||"")}</textarea></div>`;
+  }else if(type==="Client Call"){
+    fields=`<div class="twoCol"><div><label>Client Name</label><input id="lrClient" value="${escapeAttr(p.ClientName||"")}" /></div><div><label>Destination</label><textarea id="lrDestination" rows="3">${escapeHtml(p.Destination||"")}</textarea></div><div><label>Area</label><select id="lrArea"><option value="NON_NCR">Non-NCR</option><option value="NCR">NCR</option></select></div></div><div><label>Special Instructions</label><textarea id="lrNotes">${escapeHtml(p.Notes||"")}</textarea></div>`;
+  }else{
+    fields=`<div class="twoCol"><div><label>Client Name (optional)</label><input id="lrClient" value="${escapeAttr(p.ClientName||"")}" /></div><div><label>Destination</label><textarea id="lrDestination" rows="3">${escapeHtml(p.Destination||"")}</textarea></div><div><label>Area</label><select id="lrArea"><option value="NON_NCR">Non-NCR</option><option value="NCR">NCR</option></select></div><div><label>Purpose</label><select id="lrPurpose"><option>Purchasing</option><option>Item Pick-up</option><option>Installation / Servicing</option></select></div><div><label>Required Vehicle</label><select id="lrVehicleReq"><option>Car</option><option>Pick-Up</option><option>Van</option><option>Truck</option><option>Others</option></select></div></div><div><label>Special Instructions</label><textarea id="lrNotes">${escapeHtml(p.Notes||"")}</textarea></div>`;
+  }
+  $("logisticsRequestBody").innerHTML=`<div class="panel"><div class="small"><b>Request Type:</b> ${escapeHtml(type)} &nbsp; • &nbsp; <b>Status:</b> ${escapeHtml(r.Status||"")}</div><div class="hint">Edit the request information here. Scheduling, driver, vehicle and passengers remain unchanged.</div></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="${escapeAttr(r.RequestedBy||"")}" /></div>${fields}`;
+  selectValue("lrArea",p.AreaClass||"NON_NCR");
+  if(type==="Delivery"){
+    const project=(p.ProjectID||r.ProjectID)?state.projects.find(x=>String(x.ProjectID)===String(p.ProjectID||r.ProjectID)):findProjectBySO(p.SONumber||r.SONumber);
+    renderLogisticsEditDeliveryItems(project,p);
+    if(!project && $("lrItems")) $("lrItems").value=p.Items||"";
+    const so=$("lrSO"); if(so) so.addEventListener("change",editDeliveryAutofillFromSO);
+  }else if(type==="Service"){
+    selectValue("lrPurpose",p.Purpose||"Purchasing");
+    selectValue("lrVehicleReq",p.RequiredVehicle||"Car");
+  }
+  openModal("logisticsRequestModal");
+}
+async function saveLogisticsRequestDetails(){
+  const requestId=state.editingLogisticsRequestId;
+  const r=state.logisticsRequests.find(x=>x.RequestID===requestId); if(!r) return alert("Logistics request not found.");
+  const type=displayType(r.Type)||r.Type||"Delivery";
+  let payload={...(r.Payload||{})};
+  if(type==="Delivery"){
+    const selectedItems=getCheckedDeliveryItems();
+    const hasPicker=document.querySelectorAll(".lrSelectedItem").length>0;
+    payload={...payload,SONumber:cleanSO(val("lrSO")),ProjectID:val("lrProjectID")||payload.ProjectID||r.ProjectID||"",ClientName:val("lrClient"),ContactNumber:val("lrContact"),Address:val("lrAddress"),Notes:val("lrNotes"),AreaClass:val("lrArea")||"NON_NCR"};
+    if(hasPicker){
+      payload.Items=selectedItems.map(i=>i.ItemDescription).join("\n");
+      payload.ItemIDs=selectedItems.map(i=>i.ItemID);
+      payload.ItemDetails=selectedItems.map(i=>({ItemID:i.ItemID,ItemDescription:i.ItemDescription,Quantity:i.Quantity,Unit:i.Unit}));
+    }else if($("lrItems")) payload.Items=val("lrItems");
+    if(!payload.SONumber || !payload.ClientName || !payload.Address || !payload.Items) return alert("For Delivery, SO#, client, address, and items are required.");
+  }else if(type==="Client Call"){
+    payload={...payload,ClientName:val("lrClient"),Destination:val("lrDestination"),Notes:val("lrNotes"),AreaClass:val("lrArea")||"NON_NCR"};
+    if(!payload.ClientName || !payload.Destination) return alert("Client and destination are required.");
+  }else{
+    payload={...payload,ClientName:val("lrClient"),Destination:val("lrDestination"),Purpose:val("lrPurpose"),RequiredVehicle:val("lrVehicleReq"),Notes:val("lrNotes"),AreaClass:val("lrArea")||"NON_NCR"};
+    if(!payload.Destination || !payload.Purpose || !payload.RequiredVehicle) return alert("Destination, purpose, and required vehicle are required.");
+  }
+  const requestedBy=val("lrRequestedBy");
+  if(!requestedBy) return alert("Requestor Name is required.");
+  const res=await api("scheduleLogisticsRequest",{pin:accessPin(),requestId,detailsOnly:true,updates:{RequestedBy:requestedBy,ProjectID:payload.ProjectID||r.ProjectID||"",SONumber:payload.SONumber||r.SONumber||"",Payload:payload},scheduledBy:state.accessLevel==="admin"?"Admin":"Officer"});
+  if(res && res.request){
+    const idx=state.logisticsRequests.findIndex(x=>x.RequestID===requestId);
+    if(idx>=0) state.logisticsRequests[idx]=res.request;
+  }
+  state.editingLogisticsRequestId=null;
+  closeModal("logisticsRequestModal");
+  renderLogistics();
+  openLogisticsDetailModal(requestId);
+}
 function openLogisticsRequestModal(projectId="", selectedItemIds=[]){
+  state.editingLogisticsRequestId=null;
+  setLogisticsRequestModalMode("submit","PENDING");
   const p = projectId ? state.projects.find(x=>x.ProjectID===projectId) : null;
   const selected = p ? projectItems(p.ProjectID).filter(i=> selectedItemIds.length ? selectedItemIds.includes(i.ItemID) : String(i.ItemStatus||"")==="Delivery" && !isDeliveredItem(i)) : [];
   $("logisticsRequestBody").innerHTML = `<div class="twoCol"><div><label>Request Type</label><select id="lrType">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="Production" /></div><div><label>Date</label><input id="lrDate" type="date" value="${ymd(new Date())}" /></div><div><label>Time</label><input id="lrTime" type="time" value="08:00" /></div></div><div id="lrTypeFields"></div>`;
