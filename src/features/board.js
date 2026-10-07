@@ -340,11 +340,16 @@ function openMoveToSelectorModal(itemId){
     <div><label>Personnel Assigned for this task/process</label><input id="movePersonnel" list="personnelNames" placeholder="Name of assigned personnel" value="${escapeAttr(item.AssignedPersonnel||"")}" /></div>
     ${personnelDatalist()}
     <div><label>Remarks</label><textarea id="moveRemarks" placeholder="Optional remarks"></textarea></div>
-    <div class="hint">This will be processed the same way as drag-and-drop: the previous process is finished, the new process is started, and a production log is created.</div>`;
+    <div class="hint">You can change the detailed process, team or person. Changes within the same major stage are saved and logged; an assignment-only change also starts a new process record for the new PIC.</div>`;
   closeModal("itemDetailModal");
   openModal("moveModal");
 }
 
+function productionMoveChanged(item,toStatus,assignedTeamId,assignedPersonnel){
+  return String(item.ItemStatus||'').trim()!==String(toStatus||'').trim() ||
+    String(item.AssignedTeamID||'').trim()!==String(assignedTeamId||'').trim() ||
+    String(item.AssignedPersonnel||'').trim()!==String(assignedPersonnel||'').trim();
+}
 async function confirmMove(){
   if(!state.pendingMove) return;
   const select=$("moveToStatusSelect");
@@ -364,11 +369,7 @@ async function confirmMove(){
     if(!moves.length) return alert("No items were found in this SO group.");
     const missing=moves.filter(x=>!x.assignedTeamId && !x.assignedPersonnel);
     if(missing.length) return alert(`Assign a team or person for: ${missing.map(x=>x.item.ItemDescription||x.itemId).join(", ")}`);
-    const actionable=moves.filter(x=>
-      String(x.item.ItemStatus||"")!==String(toStatus||"") ||
-      String(x.item.AssignedTeamID||"")!==String(x.assignedTeamId||"") ||
-      String(x.item.AssignedPersonnel||"")!==String(x.assignedPersonnel||"")
-    );
+    const actionable=moves.filter(x=>productionMoveChanged(x.item,toStatus,x.assignedTeamId,x.assignedPersonnel));
     if(!actionable.length) return alert("All items already have this process and assignment. Choose a different process or assignment.");
 
     const result=await api("moveProductionItemsBulk",{
@@ -397,15 +398,17 @@ async function confirmMove(){
   }
 
   const item=state.items.find(i=>i.ItemID===state.pendingMove.itemId);
-  if(item && String(item.ItemStatus||"")===String(state.pendingMove.toStatus||"")) return alert("Please select a different process.");
   const assignedPersonnel=$("movePersonnel").value.trim();
   const assignedTeamId=$("moveTeam") ? $("moveTeam").value : (item?.AssignedTeamID || "");
   if(!assignedPersonnel && !assignedTeamId) return alert("Assign a team or a person before moving the item.");
+  if(!item)return alert("Item not found. Refresh the Board and try again.");
+  if(!productionMoveChanged(item,state.pendingMove.toStatus,assignedTeamId,assignedPersonnel))return alert("Choose a different process, team or person before saving.");
   const movedItemId=state.pendingMove.itemId;
-  await api("moveProductionItem", { pin:accessPin(), itemId:movedItemId, toStatus:state.pendingMove.toStatus, assignedTeamId, assignedPersonnel, remarks:$("moveRemarks").value.trim(), movedBy:state.accessLevel==="admin"?"Admin":"Officer" });
+  const result=await api("moveProductionItem", { pin:accessPin(), itemId:movedItemId, toStatus:state.pendingMove.toStatus, assignedTeamId, assignedPersonnel, remarks:$("moveRemarks").value.trim(), movedBy:state.accessLevel==="admin"?"Admin":"Officer" });
   // Force the next item-detail view to fetch fresh movement logs from History_V3.
   state.loadedItemLogs = state.loadedItemLogs || {};
   state.loadedItemLogs[String(movedItemId)] = false;
   state.logs = (state.logs || []).filter(l=>String(l.ItemID)!==String(movedItemId));
   state.pendingMove=null; state.productionLogsLoaded=false; closeModal("moveModal"); await load();
+  if(result.log)setSync("Saved "+result.log.ToStatus+" • PIC: "+(result.log.AssignedPersonnel||"Team assignment"));
 }
