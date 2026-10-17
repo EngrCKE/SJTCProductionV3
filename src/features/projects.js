@@ -42,16 +42,16 @@ async function openProjectDetails(projectId,options={}){
       <div class="panel"><div class="line" style="justify-content:space-between"><h3>Items</h3>${state.admin?`<button class="primary" id="btnEditItemsInline">Edit Items</button>`:''}</div>
         <div class="tableScroll"><table><thead><tr><th></th><th>Item</th><th>Process</th><th>Team</th><th>Assigned</th><th>Delivery</th></tr></thead><tbody>
           ${items.map(i=>{
-            const ready=String(i.ItemStatus||'')==='Delivery'&&!isDeliveredItem(i);
+            const requestable=canRequestLogisticsItem(i);
             return `<tr>
-              <td><input type="checkbox" class="projectItemCheck" value="${escapeAttr(i.ItemID)}" ${ready?'':'disabled'} /></td>
+              <td><input type="checkbox" class="projectItemCheck" value="${escapeAttr(i.ItemID)}" ${requestable?'':'disabled'} /></td>
               <td class="click" data-open-item="${escapeAttr(i.ItemID)}"><b>${escapeHtml(i.ItemDescription)}</b><div class="small">${escapeHtml(i.Quantity||'')} ${escapeHtml(i.Unit||'')}</div></td>
               <td>${escapeHtml(i.ItemStatus||'—')}</td><td>${escapeHtml(teamName(i.AssignedTeamID))}</td>
               <td>${escapeHtml(i.AssignedPersonnel||'—')}</td><td><span class="pill ${isDeliveredItem(i)?'ok':'info'}">${escapeHtml(i.DeliveryStatus||'Not Requested')}</span></td>
             </tr>`;
           }).join('')||`<tr><td colspan="6" class="hint">No items.</td></tr>`}
         </tbody></table></div>
-        <div class="hint">Only items currently in the Delivery stage can be selected for a logistics request.</div>
+        <div class="hint">Select items for a logistics request at any production stage. You can schedule delivery or client pick-up in advance.</div>
       </div>
     </div>
     <div class="panel"><h3>Project Notes</h3>
