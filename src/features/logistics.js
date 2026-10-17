@@ -265,7 +265,7 @@ function renderLogisticsEditDeliveryItems(project, payload){
     if($("lrItems")) $("lrItems").readOnly=false;
     return;
   }
-  const items=projectItems(project.ProjectID).filter(i=>i.Active!=="N" && (currentIds.has(String(i.ItemID)) || (String(i.ItemStatus||"")==="Delivery" && !isDeliveredItem(i))));
+  const items=projectItems(project.ProjectID).filter(i=>i.Active!=="N" && (currentIds.has(String(i.ItemID)) || canRequestLogisticsItem(i)));
   if(!items.length){
     box.innerHTML=`<div class="hint">No current project items are available to change. Existing item links will be preserved.</div>`;
     if($("lrItems")) $("lrItems").readOnly=false;
@@ -276,7 +276,7 @@ function renderLogisticsEditDeliveryItems(project, payload){
       <h3 style="margin:0">Items Included in Request</h3>
       <div class="line"><button type="button" id="lrSelectAllItems">Select all</button><button type="button" id="lrClearItems">Clear</button></div>
     </div>
-    <div class="hint" style="margin-bottom:8px">You can add or remove items from this logistics request. This does not delete the production item itself.</div>
+    <div class="hint" style="margin-bottom:8px">You can add or remove items, including items still in production, from this logistics request. Their current process is shown below.</div>
     ${items.map(i=>`<label class="checkLine compactCheck"><input type="checkbox" class="lrSelectedItem" value="${escapeAttr(i.ItemID)}" ${currentIds.has(String(i.ItemID))?"checked":""} /> <span><b>${escapeHtml(i.ItemDescription)}</b> <span class="small">${escapeHtml(i.Quantity||"")} ${escapeHtml(i.Unit||"")} • ${escapeHtml(i.ItemStatus||"—")}</span></span></label>`).join("")}`;
   box.querySelectorAll(".lrSelectedItem").forEach(ch=>ch.addEventListener("change",syncDeliveryItemsTextarea));
   if($("lrSelectAllItems")) $("lrSelectAllItems").onclick=()=>{ box.querySelectorAll(".lrSelectedItem").forEach(ch=>ch.checked=true); syncDeliveryItemsTextarea(); };
@@ -376,7 +376,7 @@ function openLogisticsRequestModal(projectId="", selectedItemIds=[]){
   state.editingLogisticsRequestId=null;
   setLogisticsRequestModalMode("submit","PENDING");
   const p = projectId ? state.projects.find(x=>x.ProjectID===projectId) : null;
-  const selected = p ? projectItems(p.ProjectID).filter(i=> selectedItemIds.length ? selectedItemIds.includes(i.ItemID) : String(i.ItemStatus||"")==="Delivery" && !isDeliveredItem(i)) : [];
+  const selected = p ? projectItems(p.ProjectID).filter(i=> canRequestLogisticsItem(i) && (selectedItemIds.length ? selectedItemIds.map(String).includes(String(i.ItemID)) : itemDefaultChecked(i))) : [];
   $("logisticsRequestBody").innerHTML = `<div class="twoCol"><div><label>Request Type</label><select id="lrType">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="Production" /></div><div><label>Date</label><input id="lrDate" type="date" value="${ymd(new Date())}" /></div><div><label>Time</label><input id="lrTime" type="time" value="08:00" /></div></div><div id="lrTypeFields"></div>`;
   setLogisticsTypeFields(p, selected);
   $("lrType").onchange=()=>setLogisticsTypeFields(p, selected);
@@ -387,8 +387,11 @@ function findProjectBySO(so){
   if(!key) return null;
   return state.projects.find(p=>cleanSO(p.SONumber) === key) || null;
 }
+function canRequestLogisticsItem(item){
+  return String(item.Active||"Y").trim().toUpperCase()!=="N" && !isDeliveredItem(item);
+}
 function selectableDeliveryItems(projectId){
-  return projectItems(projectId).filter(i=>i.Active!=="N" && String(i.ItemStatus||"")==="Delivery" && !isDeliveredItem(i));
+  return projectItems(projectId).filter(canRequestLogisticsItem);
 }
 function itemDefaultChecked(i){
   return String(i.ItemStatus||"")==="Delivery" && !isDeliveredItem(i);
@@ -403,7 +406,7 @@ function renderDeliveryItemPicker(project, preselectedIds=[]){
   }
   const items = selectableDeliveryItems(project.ProjectID);
   if(!items.length){
-    box.innerHTML = `<div class="hint">No active deliverable items found for SO# ${escapeHtml(cleanSO(project.SONumber))}.</div>`;
+    box.innerHTML = `<div class="hint">No active unfinished items found for SO# ${escapeHtml(cleanSO(project.SONumber))}.</div>`;
     syncDeliveryItemsTextarea();
     return;
   }
@@ -413,7 +416,7 @@ function renderDeliveryItemPicker(project, preselectedIds=[]){
       <h3 style="margin:0">Select Items to Deliver</h3>
       <div class="line"><button type="button" id="lrSelectAllItems">Select all</button><button type="button" id="lrClearItems">Clear</button></div>
     </div>
-    <div class="hint" style="margin-bottom:8px">Tick only the items included in this delivery request. This supports partial delivery per SO#.</div>
+    <div class="hint" style="margin-bottom:8px">Select the items included in this request. Items still in production can be requested and scheduled in advance; their current process is shown below.</div>
     ${items.map(i=>{
       const checked = selected.size ? selected.has(String(i.ItemID)) : itemDefaultChecked(i);
       return `<label class="checkLine compactCheck"><input type="checkbox" class="lrSelectedItem" value="${escapeAttr(i.ItemID)}" ${checked?"checked":""} /> <span><b>${escapeHtml(i.ItemDescription)}</b> <span class="small">${escapeHtml(i.Quantity||"")} ${escapeHtml(i.Unit||"")} • ${escapeHtml(i.ItemStatus||"—")} • ${escapeHtml(i.DeliveryStatus||"Not Requested")}</span></span></label>`;
