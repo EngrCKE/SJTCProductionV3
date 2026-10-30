@@ -3,7 +3,7 @@ function renderOverview(){
   const forDelivery = itemsForDeliveryList();
   const pastDue = activeItems().filter(i=>daysToDue(i.ItemDueDate).cls==="bad" && i.ItemStatus!=="Delivery");
   const todayKey = ymd(new Date());
-  const todayLogistics = state.logisticsRequests.filter(r=>r.StartDT && ymd(new Date(r.StartDT))===todayKey);
+  const todayLogistics = logisticsForDay(state.logisticsRequests.filter(r=>r.Status!=="CANCELLED"),todayKey);
   const ann = state.announcements.filter(a=>a.Active!=="N");
   $("page-overview").innerHTML = `
     <div class="pageTitle"><div><h1>Overview</h1><div class="hint">Daily production and logistics command center.</div></div></div>
@@ -70,9 +70,10 @@ function logisticsCard(r){
   const address = logisticsAddressLine(r);
   const vehicle = displayVehicle(r.VehicleCode);
   const driver = displayPerson(r.DriverCode);
-  return `<div class="card logisticsCard compactLogisticsTile" draggable="${canOfficer()}" data-logreq="${escapeAttr(r.RequestID)}" data-open-logreq="${escapeAttr(r.RequestID)}">
+  return `<div class="card logisticsCard compactLogisticsTile" draggable="${canOfficer()}" data-logreq="${escapeAttr(r.RequestID)}" data-logdate="${escapeAttr(r.OccurrenceDate||"")}" data-open-logreq="${escapeAttr(r.RequestID)}">
     <div class="logTitle">${escapeHtml(logisticsPrimaryTitle(r))}</div>
-    <div class="logType">${escapeHtml(displayType(r.Type))}</div>
+    <div class="logType">${escapeHtml(r.Activity||displayType(r.Type))}${!r.Activity&&Array.isArray(r.Payload?.Itinerary)?` • ${r.Payload.Itinerary.length} schedule(s)`:''}</div>
+    ${r.StartDT?`<div class="small">${escapeHtml(niceDT(r.StartDT))}${r.EndDT?' → '+escapeHtml(niceDT(r.EndDT)):''}</div>`:''}
     ${address ? `<div class="logLine">📍 ${escapeHtml(address)}</div>` : ""}
     ${vehicle ? `<div class="logLine">🚚 ${escapeHtml(vehicle)}</div>` : ""}
     ${driver ? `<div class="logLine">👤 ${escapeHtml(driver)}</div>` : ""}
