@@ -346,3 +346,6 @@ body.actionBusy{cursor:progress}body.actionBusy button{pointer-events:none}
 .analyticsCard{display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;gap:8px}
 .analyticsCard>h3,.analyticsCard>p{margin:0}
 .analyticsCard .analyticsProjectList{width:100%;box-sizing:border-box;margin:0}
+
+/* Multiple destinations / schedules share the app theme. */
+.itineraryEditor{margin:12px 0}.itineraryRows{display:grid;gap:12px;margin:12px 0}.itineraryRow{padding:12px;border:1px solid var(--beige);border-radius:12px;background:var(--bg);min-width:0}.itineraryRow input,.itineraryRow select,.itineraryRow textarea{width:100%;min-width:0}.itinerarySummary{padding-left:22px;margin:8px 0}.itinerarySummary li{padding:8px 0;overflow-wrap:anywhere}.itinerarySummary li div{font-size:.9em;color:var(--muted)}
