@@ -60,12 +60,13 @@ function openProjectFromLogistics(projectId){
   openProjectDetails(projectId);
 }
 function pendingLogisticsCard(r){ return logisticsCard(r); }
-function logisticsDayBox(d,list){ const key=ymd(d); const today=key===ymd(new Date()); const items=list.filter(r=>r.StartDT && ymd(new Date(r.StartDT))===key); return `<div class="dayBox ${today?"today":""}"><div class="dayHead2">${d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}${today?" • Today":""}</div><div class="dayBody2" data-logday="${key}">${items.map(logisticsCard).join("") || `<div class="small">No schedules.</div>`}</div></div>`; }
+function logisticsDayBox(d,list){ const key=ymd(d); const today=key===ymd(new Date()); const items=logisticsForDay(list,key); return `<div class="dayBox ${today?"today":""}"><div class="dayHead2">${d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}${today?" • Today":""}</div><div class="dayBody2" data-logday="${key}">${items.map(logisticsCard).join("") || `<div class="small">No schedules.</div>`}</div></div>`; }
 function displayType(type){ return type === "Travel" || type === "Client Call" ? "Client Call" : (type || ""); }
 function bindLogisticsDnD(){
   if(!canOfficer()) return;
   document.querySelectorAll("[data-logreq]").forEach(c=>c.addEventListener("dragstart",e=>{
     e.dataTransfer.setData("text/logreq",c.dataset.logreq);
+    e.dataTransfer.setData("text/logdate",c.dataset.logdate||"");
   }));
   document.querySelectorAll("[data-logday]").forEach(z=>{
     z.addEventListener("dragover",e=>{e.preventDefault();z.classList.add("dragOver")});
@@ -73,7 +74,7 @@ function bindLogisticsDnD(){
     z.addEventListener("drop",e=>{
       e.preventDefault(); z.classList.remove("dragOver");
       const requestId=e.dataTransfer.getData("text/logreq");
-      if(requestId) openScheduleModal(requestId,z.dataset.logday);
+      if(requestId) openScheduleModal(requestId,z.dataset.logday,e.dataTransfer.getData("text/logdate"));
     });
   });
 }
@@ -130,24 +131,24 @@ function normalizePassengers(payload){
   if(Array.isArray(raw)) return raw.map(resolve).filter(Boolean);
   return String(raw||"").split(",").map(x=>displayPerson(x.trim())).filter(Boolean);
 }
-function openScheduleModal(requestId,date){
+function openScheduleModal(requestId,date,sourceDate=""){
   const r=state.logisticsRequests.find(x=>x.RequestID===requestId); if(!r)return;
   state.pendingScheduleId=requestId;
   const scheduled = r.Status !== "PENDING";
-  const currentDate = date || (r.StartDT ? ymd(new Date(r.StartDT)) : ymd(new Date()));
-  const currentTime = r.StartDT ? new Date(r.StartDT).toTimeString().slice(0,5) : "08:00";
+  const itinerary=shiftLogisticsItinerary(logisticsItinerary(r),date,sourceDate);
   const passengers = normalizePassengers(r.Payload||{}).concat(((r.Payload||{}).PassengerIDs||[]));
-  $("logisticsScheduleBody").innerHTML=`<div class="panel">${logisticsCard(r)}<div class="hint" style="margin-top:6px">${scheduled ? "You are rescheduling an existing confirmed request." : "You are scheduling a pending request."}</div></div><div class="twoCol"><div><label>Date</label><input id="schedDate" type="date" value="${currentDate}" /></div><div><label>Time</label><input id="schedTime" type="time" value="${currentTime}" /></div><div><label>Driver</label><select id="schedDriver">${driverOptions(r.DriverCode||"")}</select></div><div><label>Vehicle</label><select id="schedVehicle">${vehicleOptions(r.VehicleCode||"")}</select></div></div><div><label>Manpower</label><div class="hint">Select people individually or add team members.</div>${passengerPicker(passengers)}</div><div><label>Remarks</label><textarea id="schedRemarks">${escapeHtml((r.Payload||{}).Notes||"")}</textarea></div>`;
+  $("logisticsScheduleBody").innerHTML=`<div class="panel">${logisticsCard(r)}<div class="hint" style="margin-top:6px">${scheduled ? "You are rescheduling an existing confirmed request." : "You are scheduling a pending request."}</div></div>${itineraryOptionsHTML(itinerary,"schedule",logisticsItineraryOptions(r.Payload||{}))}<div class="twoCol"><div><label>Driver</label><select id="schedDriver">${driverOptions(r.DriverCode||"")}</select></div><div><label>Vehicle</label><select id="schedVehicle">${vehicleOptions(r.VehicleCode||"")}</select></div></div><div><label>Manpower</label><div class="hint">Select people individually or add team members.</div>${passengerPicker(passengers)}</div><div><label>Remarks</label><textarea id="schedRemarks">${escapeHtml((r.Payload||{}).Notes||"")}</textarea></div>`;
   if(r.Type==="ITEM PICK-UP"){["schedDriver","schedVehicle"].forEach(id=>{$(id).closest("div").style.display="none";});}
   bindTeamManpowerPicker();
+  bindItineraryOptions("schedule");
   openModal("logisticsScheduleModal");
 }
 async function confirmSchedule(){
   const r=state.logisticsRequests.find(x=>x.RequestID===state.pendingScheduleId); if(!r)return;
-  const start=new Date(`${$("schedDate").value}T${$("schedTime").value}:00`); const end=new Date(start.getTime()+4*3600000);
+  let plan;try{plan=readItineraryPlan("schedule",r.Payload?.Address||r.Payload?.Destination||"",displayType(r.Type));}catch(e){return alert(e.message);}
   const passengerNames=selectedPassengerNames();
   const passengerIds=selectedPassengerIds();
-  const updates={Status:"CONFIRMED",StartDT:start.toISOString(),EndDT:end.toISOString(),DriverCode:r.Type==="ITEM PICK-UP"?"":$("schedDriver").value.trim(),VehicleCode:r.Type==="ITEM PICK-UP"?"":$("schedVehicle").value.trim(),Payload:{...(r.Payload||{}),Passengers:passengerNames,PassengerIDs:passengerIds,Installers:passengerNames,Notes:$("schedRemarks").value.trim()}};
+  const updates={Status:"CONFIRMED",StartDT:plan.StartDT,EndDT:plan.EndDT,DriverCode:r.Type==="ITEM PICK-UP"?"":$("schedDriver").value.trim(),VehicleCode:r.Type==="ITEM PICK-UP"?"":$("schedVehicle").value.trim(),Payload:{...(r.Payload||{}),Itinerary:plan.multiple?plan.rows:null,MultipleLocations:plan.locations,MultipleSchedules:plan.schedules,Passengers:passengerNames,PassengerIDs:passengerIds,Installers:passengerNames,Notes:$("schedRemarks").value.trim()}};
   await api("scheduleLogisticsRequest", { pin: accessPin(), requestId:r.RequestID, updates });
   closeModal("logisticsScheduleModal"); await load();
 }
@@ -190,6 +191,7 @@ async function markLogisticsRequestDelivered(requestId){
     ? p.ItemDetails.map(x=>x.ItemDescription || x.ItemID).filter(Boolean)
     : splitMultiValue(p.Items);
   const itemText = items.length ? "\n\nItems:\n- " + items.join("\n- ") : "";
+  if(Array.isArray(p.Itinerary)&&p.Itinerary.length>1&&!confirm("Complete the ENTIRE itinerary, including installation and all destinations? Confirm only after all activities are finished. Linked delivery items will be marked delivered."))return;
   const confirmedBy = prompt(r.Type==="ITEM PICK-UP"?"Confirmed picked up by:":"Confirmed delivered by:", state.accessLevel === "admin" ? "Admin" : "Officer");
   if(confirmedBy === null) return;
   const name = String(confirmedBy || "").trim();
@@ -212,13 +214,13 @@ function openLogisticsDetailModal(requestId){
   $("logisticsDetailTitle").textContent = logisticsPrimaryTitle(r);
   const passengers = normalizePassengers(p);
   const itemList = splitMultiValue(p.Items);
-  const scheduleHtml = `<div class="requestDetailBox"><h3>Schedule</h3>${detail("Date", r.StartDT ? new Date(r.StartDT).toLocaleDateString() : "—")}${detail("Time", r.StartDT && r.EndDT ? `${new Date(r.StartDT).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}–${new Date(r.EndDT).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}` : "—")}${detail("Driver", displayPerson(r.DriverCode) || "—")}${detail("Vehicle", displayVehicle(r.VehicleCode) || "—")}${detailList("Manpower", passengers)}${detail("Trip", r.TripStatus || "READY")}</div>`;
+  const scheduleHtml = `<div class="requestDetailBox"><h3>Schedule</h3>${Array.isArray(p.Itinerary)?itinerarySummaryHTML(r):detail("Start",niceDT(r.StartDT))+detail("End",niceDT(r.EndDT))}${detail("Driver", displayPerson(r.DriverCode) || "—")}${detail("Vehicle", displayVehicle(r.VehicleCode) || "—")}${detailList("Manpower", passengers)}${detail("Trip", r.TripStatus || "READY")}</div>`;
   const requestHtml = `<div class="requestDetailBox"><h3>Request</h3>${detail("Type", displayType(r.Type))}${detail("Status", r.Status)}${detail("Requested By", r.RequestedBy)}${detail("SO#", cleanSO(p.SONumber)||"—")}${detail("Client", p.ClientName||"—")}${detail("Contact", p.ContactNumber||"—")}${detail("Address/Destination", p.Address||p.Destination||"—")}${detail("Area", p.AreaClass||"—")}${detailList("Items", itemList)}${detail("Purpose", p.Purpose||"—")}${detail("Required Vehicle", p.RequiredVehicle||"—")}${detail("Notes", p.Notes||"—")}</div>`;
   $("logisticsDetailBody").innerHTML = `<div class="detailGrid">${requestHtml}${scheduleHtml}</div>`;
   const statusUpper = String(r.Status || "").toUpperCase();
   const canMarkDelivered = canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper);
   const canEditRequestDetails = canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper);
-  $("logisticsDetailFooter").innerHTML = `<button data-close="logisticsDetailModal">Close</button>${canEditRequestDetails?`<button class="primary" id="btnEditLogisticsDetails">Edit Request Details</button>`:""}${canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper)?`<button id="btnEditLogisticsFromDetail">Schedule / Reschedule</button><button id="btnReturnLogisticsPending">Return to Pending</button>`:""}${canMarkDelivered?`<button class="ok" id="btnMarkLogisticsDelivered">Mark as Delivered</button>`:""}${state.admin?`<button class="danger" id="btnCancelLogisticsRequest">Cancel Request</button><button class="danger" id="btnDeleteLogisticsRequest">Delete Request</button>`:""}`;
+  $("logisticsDetailFooter").innerHTML = `<button data-close="logisticsDetailModal">Close</button>${canEditRequestDetails?`<button class="primary" id="btnEditLogisticsDetails">Edit Request Details</button>`:""}${canOfficer() && !["DELIVERED","CANCELLED"].includes(statusUpper)?`<button id="btnEditLogisticsFromDetail">Schedule / Reschedule</button><button id="btnReturnLogisticsPending">Return to Pending</button>`:""}${canMarkDelivered?`<button class="ok" id="btnMarkLogisticsDelivered">${Array.isArray(p.Itinerary)&&p.Itinerary.length>1?"Complete Entire Request":"Mark as Delivered"}</button>`:""}${state.admin?`<button class="danger" id="btnCancelLogisticsRequest">Cancel Request</button><button class="danger" id="btnDeleteLogisticsRequest">Delete Request</button>`:""}`;
   bindCloseButtons();
   if(canEditRequestDetails && $("btnEditLogisticsDetails")) $("btnEditLogisticsDetails").onclick=()=>openEditLogisticsRequestDetails(requestId);
   if(canOfficer() && $("btnEditLogisticsFromDetail")) $("btnEditLogisticsFromDetail").onclick=()=>{ closeModal("logisticsDetailModal"); openScheduleModal(requestId, r.StartDT ? ymd(new Date(r.StartDT)) : ymd(new Date())); };
@@ -325,7 +327,8 @@ function openEditLogisticsRequestDetails(requestId){
   }else{
     fields=`<div class="twoCol"><div><label>Client Name (optional)</label><input id="lrClient" value="${escapeAttr(p.ClientName||"")}" /></div><div><label>Destination</label><textarea id="lrDestination" rows="3">${escapeHtml(p.Destination||"")}</textarea></div><div><label>Area</label><select id="lrArea"><option value="NON_NCR">Non-NCR</option><option value="NCR">NCR</option></select></div><div><label>Purpose</label><select id="lrPurpose"><option>Purchasing</option><option>Item Pick-up</option><option>Installation / Servicing</option></select></div><div><label>Required Vehicle</label><select id="lrVehicleReq"><option>Car</option><option>Pick-Up</option><option>Van</option><option>Truck</option><option>Others</option></select></div></div><div><label>Special Instructions</label><textarea id="lrNotes">${escapeHtml(p.Notes||"")}</textarea></div>`;
   }
-  $("logisticsRequestBody").innerHTML=`<div class="panel"><div class="small"><b>Request Type:</b> ${escapeHtml(type)} &nbsp; • &nbsp; <b>Status:</b> ${escapeHtml(r.Status||"")}</div><div class="hint">Edit the request information here. Scheduling, driver, vehicle and passengers remain unchanged.</div></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="${escapeAttr(r.RequestedBy||"")}" /></div>${fields}`;
+  $("logisticsRequestBody").innerHTML=`<div class="panel"><div class="small"><b>Request Type:</b> ${escapeHtml(type)} &nbsp; • &nbsp; <b>Status:</b> ${escapeHtml(r.Status||"")}</div><div class="hint">Edit the request information here. Edit destinations and activity dates below. Driver, vehicle and manpower stay assigned to the request.</div></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="${escapeAttr(r.RequestedBy||"")}" /></div>${fields}${itineraryOptionsHTML(logisticsItinerary(r),"request",logisticsItineraryOptions(p))}`;
+  bindItineraryOptions("request");
   selectValue("lrArea",p.AreaClass||"NON_NCR");
   if((type==="Delivery"||type==="ITEM PICK-UP")){
     const project=(p.ProjectID||r.ProjectID)?state.projects.find(x=>String(x.ProjectID)===String(p.ProjectID||r.ProjectID)):findProjectBySO(p.SONumber||r.SONumber);
@@ -360,9 +363,11 @@ async function saveLogisticsRequestDetails(){
     payload={...payload,ClientName:val("lrClient"),Destination:val("lrDestination"),Purpose:val("lrPurpose"),RequiredVehicle:val("lrVehicleReq"),Notes:val("lrNotes"),AreaClass:val("lrArea")||"NON_NCR"};
     if(!payload.Destination || !payload.Purpose || !payload.RequiredVehicle) return alert("Destination, purpose, and required vehicle are required.");
   }
+  let plan;try{plan=readItineraryPlan("request",payload.Address||payload.Destination||"",type);}catch(e){return alert(e.message);}
+  payload.Itinerary=plan.multiple?plan.rows:null;payload.MultipleLocations=plan.locations;payload.MultipleSchedules=plan.schedules;
   const requestedBy=val("lrRequestedBy");
   if(!requestedBy) return alert("Requestor Name is required.");
-  const res=await api("scheduleLogisticsRequest",{pin:accessPin(),requestId,detailsOnly:true,updates:{RequestedBy:requestedBy,ProjectID:payload.ProjectID||r.ProjectID||"",SONumber:payload.SONumber||r.SONumber||"",Payload:payload},scheduledBy:state.accessLevel==="admin"?"Admin":"Officer"});
+  const res=await api("scheduleLogisticsRequest",{pin:accessPin(),requestId,detailsOnly:true,updates:{StartDT:plan.StartDT,EndDT:plan.EndDT,RequestedBy:requestedBy,ProjectID:payload.ProjectID||r.ProjectID||"",SONumber:payload.SONumber||r.SONumber||"",Payload:payload},scheduledBy:state.accessLevel==="admin"?"Admin":"Officer"});
   if(res && res.request){
     const idx=state.logisticsRequests.findIndex(x=>x.RequestID===requestId);
     if(idx>=0) state.logisticsRequests[idx]=res.request;
@@ -377,9 +382,18 @@ function openLogisticsRequestModal(projectId="", selectedItemIds=[]){
   setLogisticsRequestModalMode("submit","PENDING");
   const p = projectId ? state.projects.find(x=>x.ProjectID===projectId) : null;
   const selected = p ? projectItems(p.ProjectID).filter(i=> canRequestLogisticsItem(i) && (selectedItemIds.length ? selectedItemIds.map(String).includes(String(i.ItemID)) : itemDefaultChecked(i))) : [];
-  $("logisticsRequestBody").innerHTML = `<div class="twoCol"><div><label>Request Type</label><select id="lrType">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="Production" /></div><div><label>Date</label><input id="lrDate" type="date" value="${ymd(new Date())}" /></div><div><label>Time</label><input id="lrTime" type="time" value="08:00" /></div></div><div id="lrTypeFields"></div>`;
+  const start=new Date();start.setHours(8,0,0,0);
+  const initial=[{Activity:'Delivery',Destination:'',StartDT:start.toISOString(),EndDT:new Date(start.getTime()+4*3600000).toISOString(),Notes:''}];
+  $("logisticsRequestBody").innerHTML = `<div class="twoCol"><div><label>Request Type</label><select id="lrType">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div><div><label>Requestor Name</label><input id="lrRequestedBy" value="Production" /></div></div><div id="lrTypeFields"></div>${itineraryOptionsHTML(initial,"request")}`;
+  bindItineraryOptions("request");
   setLogisticsTypeFields(p, selected);
-  $("lrType").onchange=()=>setLogisticsTypeFields(p, selected);
+  $("lrType").onchange=()=>{
+    setLogisticsTypeFields(p, selected);
+    if(!$("requestMultipleSchedules").checked){
+      const first=$("requestItinerary").querySelector('[data-it-field="Activity"]');
+      if(first){const value=displayType($("lrType").value);first.value=value==="ITEM PICK-UP"?"Client pick-up":value;}
+    }
+  };
   openModal("logisticsRequestModal");
 }
 function findProjectBySO(so){
@@ -477,7 +491,7 @@ function setLogisticsTypeFields(project=null, selectedItems=[]){
 }
 function val(id){ const el=$(id); return el ? el.value.trim() : ""; }
 async function submitLogisticsRequest(){
-  const type=$("lrType").value; const date=val("lrDate"), time=val("lrTime"); const start=new Date(`${date}T${time}:00`), end=new Date(start.getTime()+4*3600000);
+  const type=$("lrType").value;
   let payload={};
   if((type==="Delivery"||type==="ITEM PICK-UP")){
     const selectedItems = getCheckedDeliveryItems();
@@ -485,8 +499,10 @@ async function submitLogisticsRequest(){
   }
   else if(type==="Client Call") payload={ ClientName:val("lrClient"), Destination:val("lrDestination"), Notes:val("lrNotes"), AreaClass:val("lrArea")||"NON_NCR" };
   else payload={ ClientName:val("lrClient"), Destination:val("lrDestination"), Purpose:val("lrPurpose"), RequiredVehicle:val("lrVehicleReq"), Notes:val("lrNotes"), AreaClass:val("lrArea")||"NON_NCR" };
-  const request={ Type:type, Status:"PENDING", RequestedBy:val("lrRequestedBy"), ViberUserID:"PRODUCTION-DASHBOARD", StartDT:start.toISOString(), EndDT:end.toISOString(), Payload:payload, TripStatus:"READY", DriverCode:"", VehicleCode:"" };
-  if(!request.RequestedBy || !date || !time) return alert("Requestor, date, and time are required.");
+  let plan;try{plan=readItineraryPlan("request",payload.Address||payload.Destination||"",type);}catch(e){return alert(e.message);}
+  payload.Itinerary=plan.multiple?plan.rows:null;payload.MultipleLocations=plan.locations;payload.MultipleSchedules=plan.schedules;
+  const request={ Type:type, Status:"PENDING", RequestedBy:val("lrRequestedBy"), ViberUserID:"PRODUCTION-DASHBOARD", StartDT:plan.StartDT, EndDT:plan.EndDT, Payload:payload, TripStatus:"READY", DriverCode:"", VehicleCode:"" };
+  if(!request.RequestedBy) return alert("Requestor Name is required.");
   if((type==="Delivery"||type==="ITEM PICK-UP") && (!payload.SONumber || !payload.ClientName || !payload.Address || !payload.Items)) return alert("For Delivery, SO#, client, address, and items are required.");
   if(type==="Client Call" && (!payload.ClientName || !payload.Destination)) return alert("For Client Call, client and destination are required.");
   if(type==="Service" && (!payload.Destination || !payload.Purpose || !payload.RequiredVehicle)) return alert("For Service, destination, purpose, and required vehicle are required.");
@@ -500,9 +516,9 @@ async function submitLogisticsRequest(){
 
 
 function currentWeekConfirmedRequests(){
-  const dates=currentWeekDates();
-  const start=dates[0]; const end=new Date(dates[6]); end.setDate(end.getDate()+1);
-  return state.logisticsRequests.filter(r=>String(r.Status||"").toUpperCase()==="CONFIRMED" && r.StartDT && new Date(r.StartDT)>=start && new Date(r.StartDT)<end).sort((a,b)=>new Date(a.StartDT)-new Date(b.StartDT));
+  const requests=state.logisticsRequests.filter(r=>String(r.Status||"").toUpperCase()==="CONFIRMED");
+  return currentWeekDates().flatMap(date=>logisticsForDay(requests,ymd(date)));
+
 }
 function openDispatchView(){
   const confirmed=currentWeekConfirmedRequests();
@@ -529,7 +545,7 @@ function gatePassSlipHTML(r){
   const passengers=normalizePassengers(p).join(", ") || "—";
   const date=r.StartDT ? new Date(r.StartDT).toLocaleDateString() : "";
   const time=r.StartDT ? new Date(r.StartDT).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}) : "";
-  return `<section class="gpSlip"><h2>SJTC MANUFACTURING INC.</h2><h3>GATE PASS</h3><p><b>Date:</b> ${escapeHtml(date)} &nbsp; <b>Time:</b> ${escapeHtml(time)}</p><p><b>Vehicle:</b> ${escapeHtml(displayVehicle(r.VehicleCode)||"—")} &nbsp; <b>Driver:</b> ${escapeHtml(displayPerson(r.DriverCode)||"—")}</p><p><b>SO#:</b> ${escapeHtml(cleanSO(p.SONumber)||"—")} &nbsp; <b>Client:</b> ${escapeHtml(p.ClientName||"—")}</p><p><b>Itinerary:</b> ${escapeHtml(p.Address||p.Destination||"—")}</p><p><b>Items/Purpose:</b> ${escapeHtml(p.Items||p.Purpose||displayType(r.Type)||"—")}</p><p><b>Passengers/Personnel:</b> ${escapeHtml(passengers)}</p><p><b>Remarks:</b> ${escapeHtml(p.Notes||"—")}</p><div class="gpSign"><span>Requested by: ${escapeHtml(r.RequestedBy||"")}</span><span>Approved by: __________________</span></div></section>`;
+  return `<section class="gpSlip"><h2>SJTC MANUFACTURING INC.</h2><h3>GATE PASS</h3><p><b>Date:</b> ${escapeHtml(date)} &nbsp; <b>Time:</b> ${escapeHtml(time)}</p><p><b>Vehicle:</b> ${escapeHtml(displayVehicle(r.VehicleCode)||"—")} &nbsp; <b>Driver:</b> ${escapeHtml(displayPerson(r.DriverCode)||"—")}</p><p><b>SO#:</b> ${escapeHtml(cleanSO(p.SONumber)||"—")} &nbsp; <b>Client:</b> ${escapeHtml(p.ClientName||"—")}</p><p><b>Activity:</b> ${escapeHtml(r.Activity||displayType(r.Type))}</p><p><b>Itinerary:</b> ${escapeHtml(p.Address||p.Destination||"—")}</p><p><b>Items/Purpose:</b> ${escapeHtml(p.Items||p.Purpose||displayType(r.Type)||"—")}</p><p><b>Passengers/Personnel:</b> ${escapeHtml(passengers)}</p><p><b>Remarks:</b> ${escapeHtml(p.Notes||"—")}</p><div class="gpSign"><span>Requested by: ${escapeHtml(r.RequestedBy||"")}</span><span>Approved by: __________________</span></div></section>`;
 }
 function printGatePassesForCurrentWeek(){
   const list=currentWeekConfirmedRequests();
